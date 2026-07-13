@@ -1,0 +1,142 @@
+"""
+Data snapshot contract helpers: the `_meta` provenance block.
+
+Implements the writer and validator side of DATA_SNAPSHOT_CONTRACT.md. Every
+data/*.json the dashboard publishes carries a `_meta` block declaring where the
+data came from, when, by which script, and whether it is live or sample data.
+The frontend's DataStatusPanel and SampleBadge render directly off these fields,
+so honesty about data status is enforced structurally, not by convention.
+
+Usage (in a fetch script):
+    from toolkit.snapshot import build_meta, validate_meta, validate_unique_ids
+
+    data["_meta"] = build_meta(
+        source_key="tdoe-tcap-district",
+        source_name="TDOE TCAP Assessment File",
+        script="scripts/fetch_tdoe_assessment.py",
+        record_grain="district-year-subject-grade-group",
+        how_to_update="Run: python3 scripts/fetch_tdoe_assessment.py",
+        notes="Filtered to District 792 (MSCS) from the statewide file.",
+        source_url="https://www.tn.gov/education/.../data-downloads.html",
+    )
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+SCHEMA_VERSION = 1
+
+
+class SnapshotError(Exception):
+    pass
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise SnapshotError(message)
+
+
+def build_meta(
+    source_key: str,
+    source_name: str,
+    script: str,
+    record_grain: str,
+    how_to_update: str,
+    notes: str,
+    source_url: str | None = None,
+    is_sample: bool = False,
+    status: str = "live",
+    snapshot_ready: bool = True,
+    fetched_at: str | None = None,
+    **extra_run_fields: Any,
+) -> dict:
+    """Build a contract-compliant _meta block. Timestamps default to now."""
+    fetched_at = fetched_at or datetime.now().isoformat(timespec="seconds")
+    run: dict[str, Any] = {
+        "sourceKey": source_key,
+        "sourceName": source_name,
+        "script": script,
+        "fetchedAt": fetched_at,
+        "recordGrain": record_grain,
+        "snapshotReady": snapshot_ready,
+    }
+    if source_url:
+        run["sourceUrl"] = source_url
+    run.update(extra_run_fields)
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "isSample": is_sample,
+        "status": status,
+        "lastFetched": fetched_at,
+        "fetchedBy": script.split("/")[-1],
+        "howToUpdate": how_to_update,
+        "collectionRun": run,
+        "notes": notes,
+    }
+
+
+def validate_meta(path: str, data: dict[str, Any], expected_source_key: str,
+                  expected_grain: str, allow_sample: bool = False) -> None:
+    """
+    Validate a file's _meta block against the contract.
+
+    allow_sample=True accepts scaffold-phase sample files (isSample true,
+    status 'sample'); production validation should leave it False so sample
+    data can never masquerade as a live snapshot.
+    """
+    meta = data.get("_meta") or {}
+    run = meta.get("collectionRun") or {}
+
+    require(meta.get("schemaVersion") == SCHEMA_VERSION,
+            f"{path}: _meta.schemaVersion must be {SCHEMA_VERSION}")
+    if not allow_sample:
+        require(meta.get("isSample") is False,
+                f"{path}: snapshot-ready source cannot be sample data")
+        require(meta.get("status") == "live",
+                f"{path}: snapshot-ready source must have live status")
+    else:
+        require(isinstance(meta.get("isSample"), bool),
+                f"{path}: _meta.isSample must be a boolean")
+        require(bool(meta.get("status")), f"{path}: missing _meta.status")
+    require(bool(meta.get("lastFetched")), f"{path}: missing _meta.lastFetched")
+    require(bool(meta.get("fetchedBy")), f"{path}: missing _meta.fetchedBy")
+    require(bool(meta.get("howToUpdate")), f"{path}: missing _meta.howToUpdate")
+    require(bool(meta.get("notes")), f"{path}: missing _meta.notes")
+    require(run.get("snapshotReady") is True,
+            f"{path}: collectionRun.snapshotReady must be true")
+    require(run.get("sourceKey") == expected_source_key,
+            f"{path}: unexpected collectionRun.sourceKey")
+    require(run.get("recordGrain") == expected_grain,
+            f"{path}: unexpected collectionRun.recordGrain")
+    require(bool(run.get("script")), f"{path}: missing collectionRun.script")
+    require(bool(run.get("fetchedAt")), f"{path}: missing collectionRun.fetchedAt")
+
+
+def validate_unique_ids(path: str, rows: list[dict[str, Any]], prefix: str) -> None:
+    """Rows that could become database records need stable, unique, prefixed IDs."""
+    seen: set[str] = set()
+    for index, row in enumerate(rows):
+        row_id = row.get("id")
+        require(isinstance(row_id, str) and bool(row_id),
+                f"{path}: row {index} missing id")
+        require(row_id.startswith(prefix),
+                f"{path}: row {index} id has wrong prefix: {row_id}")
+        require(row_id not in seen, f"{path}: duplicate row id: {row_id}")
+        seen.add(row_id)
+
+
+def load_json(root: Path, rel_path: str) -> dict[str, Any]:
+    with open(root / rel_path) as fh:
+        return json.load(fh)
+
+
+def write_json(root: Path, rel_path: str, data: dict[str, Any]) -> None:
+    target = root / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "w") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
