@@ -79,6 +79,61 @@ def build_meta(
     }
 
 
+def upsert_composite_source_meta(
+    data: dict[str, Any],
+    *,
+    source_id: str,
+    source_meta: dict[str, Any],
+    composite_source_key: str,
+    composite_source_name: str,
+    composite_script: str,
+    composite_record_grain: str,
+    expected_sources: tuple[str, ...],
+    how_to_update: str,
+    notes: str,
+) -> None:
+    """Merge one verified source run into a multi-pipeline data file's metadata."""
+    existing_meta = data.get("_meta") or {}
+    source_runs = dict(existing_meta.get("sourceRuns") or {})
+    source_runs[source_id] = source_meta["collectionRun"]
+
+    fetched_values = [
+        run.get("fetchedAt") for run in source_runs.values() if run.get("fetchedAt")
+    ]
+    latest_fetched = max(fetched_values)
+    completed = set(source_runs)
+    is_complete = set(expected_sources).issubset(completed)
+    latest_school_year = max(
+        (
+            run.get("schoolYear")
+            for run in source_runs.values()
+            if run.get("schoolYear")
+        ),
+        default=None,
+    )
+
+    composite_meta = build_meta(
+        source_key=composite_source_key,
+        source_name=composite_source_name,
+        script=composite_script,
+        record_grain=composite_record_grain,
+        how_to_update=how_to_update,
+        notes=(
+            notes
+            + f" Verified source pipelines: {', '.join(sorted(completed))}."
+            + ("" if is_complete else " Remaining fields retain their prior status until their dedicated pipelines run.")
+        ),
+        is_sample=False,
+        status="live" if is_complete else "mixed",
+        fetched_at=latest_fetched,
+        schoolYear=latest_school_year,
+    )
+    composite_meta["sourceRuns"] = {
+        key: source_runs[key] for key in sorted(source_runs)
+    }
+    data["_meta"] = composite_meta
+
+
 def validate_meta(path: str, data: dict[str, Any], expected_source_key: str,
                   expected_grain: str, allow_sample: bool = False) -> None:
     """
