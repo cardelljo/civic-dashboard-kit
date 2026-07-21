@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "civic-toolkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shared data-acquisition clients for Bluff City Tech civic dashboards (901justice, 901education, 901economy)."
 requires-python = ">=3.10"
 dependencies = [
@@ -13,11 +13,19 @@ dependencies = [
 
 [project.optional-dependencies]
 # Only needed by ai_extract.py / pdf_report.py (T3 AI-assisted extraction jobs).
+# langextract has no native Anthropic backend (Gemini/OpenAI/Ollama only) --
+# ai_extract.py remains the Anthropic-native path (901economy PLAN.md §0.4).
 ai = [
     "pymupdf>=1.24.0",
     "anthropic>=0.30.0",
     "openai>=1.30.0",
     "google-generativeai>=0.7.0",
+    "langextract>=1.0.0",
+]
+# Only needed by postgres_store.py -- a dashboard whose store is still the
+# SQLite/NDJSON pattern (observations.py) doesn't need a Postgres driver.
+postgres = [
+    "psycopg2-binary>=2.9.0",
 ]
 
 [tool.setuptools]

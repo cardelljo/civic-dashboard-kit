@@ -52,9 +52,19 @@ def build_meta(
     status: str = "live",
     snapshot_ready: bool = True,
     fetched_at: str | None = None,
+    tier: str | None = None,
     **extra_run_fields: Any,
 ) -> dict:
-    """Build a contract-compliant _meta block. Timestamps default to now."""
+    """Build a contract-compliant _meta block. Timestamps default to now.
+
+    `tier` is the automation-tier label ('T1' full API automation, 'T2'
+    scheduled file pull, 'T3' AI-assisted extraction, 'T4' static one-time
+    load -- see 901economy's PLAN.md §4) so the frontend can render a tier
+    badge alongside the existing live/sample/gap status badge. Optional and
+    additive: existing callers that don't pass it are unaffected, and
+    `validate_meta` does not require it, so 901justice/901education's current
+    data files stay contract-compliant without being touched.
+    """
     fetched_at = fetched_at or datetime.now().isoformat(timespec="seconds")
     run: dict[str, Any] = {
         "sourceKey": source_key,
@@ -66,6 +76,8 @@ def build_meta(
     }
     if source_url:
         run["sourceUrl"] = source_url
+    if tier:
+        run["tier"] = tier
     run.update(extra_run_fields)
     return {
         "schemaVersion": SCHEMA_VERSION,

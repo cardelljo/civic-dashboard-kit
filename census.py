@@ -66,6 +66,17 @@ class AcsClient:
                county: str = SHELBY_COUNTY) -> dict[str, str]:
         return self._get(variables, f"for=county:{county}&in=state:{state}")
 
+    def msa(self, variables: str, cbsa: str) -> dict[str, str]:
+        """Metro/micro statistical area cut, e.g. cbsa='32820' for Memphis MSA."""
+        return self._get(
+            variables,
+            f"for=metropolitan statistical area/micropolitan statistical area:{cbsa}",
+        )
+
+    def place(self, variables: str, place: str, state: str = SHELBY_STATE) -> dict[str, str]:
+        """Census place (city) cut, e.g. place='48000' for Memphis city, TN."""
+        return self._get(variables, f"for=place:{place}&in=state:{state}")
+
     def county_tracts(self, variables: str, state: str = SHELBY_STATE,
                       county: str = SHELBY_COUNTY) -> list[dict[str, str]]:
         """One dict per census tract in the county."""
