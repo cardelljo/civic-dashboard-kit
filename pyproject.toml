@@ -3,10 +3,22 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "civic-toolkit"
-version = "0.2.0"
-description = "Shared data-acquisition clients for Bluff City Tech civic dashboards (901justice, 901education, 901economy)."
+name = "civic-dashboard-kit"
+version = "0.1.0"
+description = "Data-acquisition clients, a source-provenance contract, and an append-only observations store for building honest, sourced civic data dashboards."
+readme = "README.md"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
+authors = [
+    { name = "Bluff City Tech" },
+]
+keywords = ["civic-tech", "open-data", "dashboard", "census", "etl"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Sociology",
+]
 dependencies = [
     "requests>=2.31.0",
 ]
@@ -28,6 +40,14 @@ postgres = [
     "psycopg2-binary>=2.9.0",
 ]
 
-[tool.setuptools]
-packages = ["toolkit"]
-package-dir = {"toolkit" = "."}
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Standard src-layout: without this, pytest would import tests against
+# whatever `toolkit` happens to be first on sys.path (e.g. a stale editable
+# install) instead of always this checkout's src/toolkit -- and a bare
+# module at the repo root here (rather than nested under src/) previously
+# collided with pytest's own rootdir path insertion. See README.md's
+# Installing section for the distribution-name-vs-import-name note.
+pythonpath = ["src"]
