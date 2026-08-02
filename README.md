@@ -218,6 +218,11 @@ run. Start with `observations.py`; move to `postgres_store.py` when the
 NDJSON ledger's commit sizes or review burden actually become a problem, not
 before.
 
+Once you are on Postgres, how the instance is laid out across dashboards — one
+instance, one schema each, plus a shared PostGIS `geo` schema holding the
+boundary polygons they all plot — is recorded in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Design principles
 
 - **Toolkit modules are generic.** No dashboard-specific source URLs, field
