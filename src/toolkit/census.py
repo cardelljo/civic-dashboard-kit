@@ -12,10 +12,15 @@ redirected to https://api.census.gov/data/missing_key.html instead of returning
 data, so `AcsClient` accepts an optional `api_key`
 (https://api.census.gov/data/key_signup.html).
 
-It stays optional rather than required for two reasons: the variable *catalog*
-endpoints (`.../variables.json`) still need no key, and that is exactly how a
-caller verifies a variable ID before using it; and making it required would
-break existing callers that construct `AcsClient(year)` today.
+That redirect lands on an HTML page served with **HTTP 200**, so
+`raise_for_status()` does not catch it and the failure surfaces as an opaque
+JSON decode error several frames from the cause. `_rows` converts it into a
+message that names the actual problem.
+
+The key stays optional rather than required for two reasons: the variable
+*catalog* endpoints (`.../variables.json`) still need no key, and that is
+exactly how a caller verifies a variable ID before using it; and making it
+required would break existing callers that construct `AcsClient(year)` today.
 
 BLS's public v2 timeseries endpoint still needs no key at moderate volumes,
 though one raises the rate limit.
@@ -33,12 +38,19 @@ Usage:
 
 from __future__ import annotations
 
+from urllib.parse import quote, urlencode
+
 import requests
 
 SHELBY_STATE = "47"
 SHELBY_COUNTY = "157"
 
 BLS_API_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+
+# A query-parameter value. A list means the parameter repeats, which is how the
+# multi-level `in=state:47&in=county:157` geography clause is expressed.
+# (PEP 604 union, evaluated at import -- fine on the declared floor of 3.10.)
+_GeoValue = str | list[str]
 
 _MONTH_NAMES = {
     "M01": "Jan", "M02": "Feb", "M03": "Mar", "M04": "Apr",
@@ -65,20 +77,47 @@ class AcsClient:
             path = f"{self.dataset}/subject"
         return f"https://api.census.gov/data/{self.year}/{path}"
 
-    def _key_suffix(self) -> str:
-        """`&key=...` when a key is configured, else empty.
+    def _rows(self, variables: str, geo: dict[str, _GeoValue]) -> list[list[str]]:
+        """Issue one ACS query and return its raw header+data rows.
 
-        Appended to the URL rather than passed via requests' `params=` so the
-        call signature stays `requests.get(url, timeout=...)` -- existing
-        callers and their no-network test doubles depend on that shape.
+        Callers pass geography as a dict, so nothing hand-builds a query string:
+        the key becomes a parameter like any other (no `?`-vs-`&` to get wrong,
+        no second code path that can forget it) and values that need escaping --
+        `metropolitan statistical area/micropolitan statistical area:32820` is a
+        real `for=` value -- are escaped for us.
+
+        The dict is encoded here rather than handed to requests' `params=`
+        because requests encodes via `quote_plus`, which renders a space as `+`.
+        Census's published examples use `%20` (`in=state:06%20county:073`), and
+        whether its parser also accepts `+` is not something we can confirm
+        without spending a live request to find out. `quote_via=quote` emits
+        `%20` and leaves `/` and `:` literal, matching those examples in the
+        places where it matters.
         """
-        return f"&key={self.api_key}" if self.api_key else ""
+        params: dict[str, _GeoValue] = {"get": f"NAME,{variables}", **geo}
+        if self.api_key:
+            params["key"] = self.api_key
+        query = urlencode(params, doseq=True, quote_via=quote, safe="/:*,")
 
-    def _get(self, variables: str, geo_clause: str) -> dict[str, str]:
-        url = f"{self._base(variables)}?get=NAME,{variables}&{geo_clause}{self._key_suffix()}"
-        r = requests.get(url, timeout=self.timeout)
+        r = requests.get(self._base(variables), params=query, timeout=self.timeout)
         r.raise_for_status()
-        rows = r.json()
+        try:
+            return r.json()
+        except ValueError as exc:
+            # A missing or invalid key does not 4xx: Census redirects to an HTML
+            # page served with HTTP 200, so raise_for_status() passes and the
+            # only symptom is JSON that will not parse. Say what went wrong here
+            # rather than letting a decode error stand in for it.
+            raise RuntimeError(
+                "Census returned a non-JSON body. The usual cause is a missing or "
+                "invalid API key -- the data endpoints now require one, and reject "
+                "requests with an HTML page rather than an error status. "
+                "Pass AcsClient(..., api_key=...); get a free key at "
+                "https://api.census.gov/data/key_signup.html"
+            ) from exc
+
+    def _get(self, variables: str, geo: dict[str, _GeoValue]) -> dict[str, str]:
+        rows = self._rows(variables, geo)
         # rows[0] = headers, rows[1] = data
         if len(rows) < 2:
             raise ValueError(f"Unexpected Census response: {rows}")
@@ -86,32 +125,31 @@ class AcsClient:
 
     def county(self, variables: str, state: str = SHELBY_STATE,
                county: str = SHELBY_COUNTY) -> dict[str, str]:
-        return self._get(variables, f"for=county:{county}&in=state:{state}")
+        return self._get(variables, {"for": f"county:{county}", "in": f"state:{state}"})
 
     def msa(self, variables: str, cbsa: str) -> dict[str, str]:
         """Metro/micro statistical area cut, e.g. cbsa='32820' for Memphis MSA."""
         return self._get(
             variables,
-            f"for=metropolitan statistical area/micropolitan statistical area:{cbsa}",
+            {"for": f"metropolitan statistical area/micropolitan statistical area:{cbsa}"},
         )
 
     def place(self, variables: str, place: str, state: str = SHELBY_STATE) -> dict[str, str]:
         """Census place (city) cut, e.g. place='48000' for Memphis city, TN."""
-        return self._get(variables, f"for=place:{place}&in=state:{state}")
+        return self._get(variables, {"for": f"place:{place}", "in": f"state:{state}"})
 
     def county_tracts(self, variables: str, state: str = SHELBY_STATE,
                       county: str = SHELBY_COUNTY) -> list[dict[str, str]]:
         """One dict per census tract in the county."""
-        # Builds its own URL rather than going through _get (it returns many
-        # rows, not one), so the key suffix has to be applied here too --
-        # forgetting it would leave tract queries silently unauthenticated.
-        url = (
-            f"{self._base(variables)}?get=NAME,{variables}"
-            f"&for=tract:*&in=state:{state}%20county:{county}{self._key_suffix()}"
+        # The two-level `in` is a list, which requests renders as the repeated
+        # form `in=state:47&in=county:157`. Census documents both that and the
+        # space-separated `in=state:47%20county:157`; the repeated form is used
+        # here because it contains no space, so nothing depends on whether the
+        # server decodes an encoded space as `+` or `%20`.
+        rows = self._rows(
+            variables,
+            {"for": "tract:*", "in": [f"state:{state}", f"county:{county}"]},
         )
-        r = requests.get(url, timeout=self.timeout)
-        r.raise_for_status()
-        rows = r.json()
         headers = rows[0]
         return [dict(zip(headers, row)) for row in rows[1:]]
 
