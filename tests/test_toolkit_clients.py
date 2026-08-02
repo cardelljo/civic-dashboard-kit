@@ -118,3 +118,35 @@ def test_bea_raises_on_api_error(monkeypatch):
         assert False, "expected RuntimeError"
     except RuntimeError as e:
         assert "bad param" in str(e)
+
+
+def test_acs_appends_api_key_when_configured(monkeypatch):
+    seen = []
+    def get(url, timeout):
+        seen.append(url)
+        return Response([["NAME", "B19013_001E"], ["Memphis, TN-MS-AR Metro Area", "58000"]])
+    monkeypatch.setattr("toolkit.census.requests.get", get)
+    AcsClient(2023, api_key="fixture-key").msa("B19013_001E", cbsa="32820")
+    assert "key=fixture-key" in seen[0]
+
+
+def test_acs_omits_key_when_not_configured(monkeypatch):
+    """Backwards compatibility: existing callers construct AcsClient(year)."""
+    seen = []
+    def get(url, timeout):
+        seen.append(url)
+        return Response([["NAME", "B19013_001E"], ["Shelby County", "58000"]])
+    monkeypatch.setattr("toolkit.census.requests.get", get)
+    AcsClient(2023).county("B19013_001E")
+    assert "key=" not in seen[0]
+
+
+def test_county_tracts_also_carries_the_key(monkeypatch):
+    """county_tracts builds its own URL, so it is the easy one to forget."""
+    seen = []
+    def get(url, timeout):
+        seen.append(url)
+        return Response([["NAME", "B19013_001E", "tract"], ["Tract 1", "42000", "000100"]])
+    monkeypatch.setattr("toolkit.census.requests.get", get)
+    AcsClient(2023, api_key="fixture-key").county_tracts("B19013_001E")
+    assert "key=fixture-key" in seen[0]

@@ -7,12 +7,23 @@ can pull ACS variables for any geography without re-learning the API quirks —
 detail vs. subject-table endpoints, header-row response format, and the BLS
 monthly-period filtering.
 
-No API keys required for either service at moderate volumes.
+**The Census data API now requires a free API key** -- requests without one are
+redirected to https://api.census.gov/data/missing_key.html instead of returning
+data, so `AcsClient` accepts an optional `api_key`
+(https://api.census.gov/data/key_signup.html).
+
+It stays optional rather than required for two reasons: the variable *catalog*
+endpoints (`.../variables.json`) still need no key, and that is exactly how a
+caller verifies a variable ID before using it; and making it required would
+break existing callers that construct `AcsClient(year)` today.
+
+BLS's public v2 timeseries endpoint still needs no key at moderate volumes,
+though one raises the rate limit.
 
 Usage:
     from toolkit.census import AcsClient, bls_monthly_series
 
-    acs = AcsClient(year=2022)
+    acs = AcsClient(year=2022, api_key=os.environ["CENSUS_API_KEY"])
     values = acs.county("B17001_002E,B17001_001E", state="47", county="157")
     # -> {"NAME": "Shelby County, Tennessee", "B17001_002E": "...", ...}
 
@@ -39,10 +50,12 @@ _MONTH_NAMES = {
 class AcsClient:
     """ACS 5-year estimates client covering detail (B-) and subject (S-) tables."""
 
-    def __init__(self, year: int, dataset: str = "acs/acs5", timeout: int = 30):
+    def __init__(self, year: int, dataset: str = "acs/acs5", timeout: int = 30,
+                 api_key: str | None = None):
         self.year = year
         self.dataset = dataset
         self.timeout = timeout
+        self.api_key = api_key
 
     def _base(self, variables: str) -> str:
         # Subject tables (S-prefixed variables) live under a different path
@@ -52,8 +65,17 @@ class AcsClient:
             path = f"{self.dataset}/subject"
         return f"https://api.census.gov/data/{self.year}/{path}"
 
+    def _key_suffix(self) -> str:
+        """`&key=...` when a key is configured, else empty.
+
+        Appended to the URL rather than passed via requests' `params=` so the
+        call signature stays `requests.get(url, timeout=...)` -- existing
+        callers and their no-network test doubles depend on that shape.
+        """
+        return f"&key={self.api_key}" if self.api_key else ""
+
     def _get(self, variables: str, geo_clause: str) -> dict[str, str]:
-        url = f"{self._base(variables)}?get=NAME,{variables}&{geo_clause}"
+        url = f"{self._base(variables)}?get=NAME,{variables}&{geo_clause}{self._key_suffix()}"
         r = requests.get(url, timeout=self.timeout)
         r.raise_for_status()
         rows = r.json()
@@ -80,9 +102,12 @@ class AcsClient:
     def county_tracts(self, variables: str, state: str = SHELBY_STATE,
                       county: str = SHELBY_COUNTY) -> list[dict[str, str]]:
         """One dict per census tract in the county."""
+        # Builds its own URL rather than going through _get (it returns many
+        # rows, not one), so the key suffix has to be applied here too --
+        # forgetting it would leave tract queries silently unauthenticated.
         url = (
             f"{self._base(variables)}?get=NAME,{variables}"
-            f"&for=tract:*&in=state:{state}%20county:{county}"
+            f"&for=tract:*&in=state:{state}%20county:{county}{self._key_suffix()}"
         )
         r = requests.get(url, timeout=self.timeout)
         r.raise_for_status()
