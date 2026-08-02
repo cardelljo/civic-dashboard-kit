@@ -9,7 +9,10 @@ not here: this module has no CREATE TABLE statements of its own and assumes
 the schema already exists on whatever connection it's given.
 
 Requires psycopg2 (the `postgres` extra):
-    pip install "civic-toolkit[postgres] @ git+https://github.com/cardelljo/901education.git@main#subdirectory=toolkit"
+    pip install "civic-dashboard-kit[postgres] @ git+https://github.com/cardelljo/civic-dashboard-kit.git@main"
+
+Instance and schema layout (one instance, one schema per dashboard, plus a
+shared `geo` schema with PostGIS) is recorded in docs/ARCHITECTURE.md.
 
 Usage (in a pipeline extractor, after computing the values it would otherwise
 write to JSON):
@@ -46,8 +49,8 @@ try:
 except ImportError as exc:  # pragma: no cover - exercised only when the extra is missing
     raise ImportError(
         "toolkit.postgres_store requires the 'postgres' extra: "
-        'pip install "civic-toolkit[postgres] @ '
-        'git+https://github.com/cardelljo/901education.git@main#subdirectory=toolkit"'
+        'pip install "civic-dashboard-kit[postgres] @ '
+        'git+https://github.com/cardelljo/civic-dashboard-kit.git@main"'
     ) from exc
 
 
