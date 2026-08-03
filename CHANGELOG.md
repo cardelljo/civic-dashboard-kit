@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-03
+
+Cut so consumers can pin a version instead of tracking `main`. Both dashboards
+depended on `@main`, which meant a change here could break their CI with no
+commit in their repos — and this release contains exactly such a change (see
+the test-double note below). 901economy's tests survived it only because they
+were updated in the same batch; 901education's survived only because it happens
+to import nothing from `census.py`. Neither is protection, hence the tag.
+
 ### Added
 - `census.AcsClient` accepts an optional `api_key`. The Census data endpoints
   now require a free key; the variable *catalog* endpoints still do not, which
@@ -28,6 +37,22 @@
   `toolkit.census.requests.get` must now take `(url, params, timeout)`, and
   `params` is an encoded query string — assert via `urllib.parse.parse_qs`.
   No behavior change for callers of the public methods.
+
+### Fixed
+- `postgres_store`'s ImportError pointed at a dead install path. It told anyone
+  missing the `postgres` extra to install
+  `civic-toolkit[postgres] @ ...901education.git@main#subdirectory=toolkit` —
+  the pre-extraction repo path *and* the pre-rename distribution name. That is
+  the message a user sees when the import actually fails, so it sent them
+  somewhere that no longer resolves.
+
+### Docs
+- New [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the home for decisions
+  about infrastructure no single dashboard owns — the shared Postgres instance,
+  schema-per-dashboard layout, PostGIS, and the shared `geo.boundaries` store.
+  Those had been recorded in one dashboard's `PLAN.md` despite binding all
+  three. States the tiering: code this package ships → `README.md`; shared
+  infrastructure → that file; single-dashboard concerns → that repo's own docs.
 
 ## [0.1.0] — 2026-07-27
 
