@@ -157,3 +157,112 @@ into `geo.boundaries` uses this package.
 Open, not decided here: whether the MPD ward/station-area layers belong in the
 shared schema or stay justice-specific. They are currently treated as
 justice-specific.
+
+## 7. Shared frontend code ships from this repo, as a second package
+
+**The data-status UI is extracted here, and this repo becomes dual-published:**
+a Python distribution installed with pip and a TypeScript package installed with
+npm, from one repo, with both manifests at the root. This supersedes
+901education's "frontend extraction remains unevaluated" and 901economy's task 8
+note that deferred to it.
+
+### Why one repo rather than a second one
+
+**npm cannot install a package from a subdirectory of a git repo; pip can**
+(`#subdirectory=`). A separate `901-ui` repo would work, but so does putting
+`package.json` beside `pyproject.toml` at this repo's root — the two package
+managers look for different manifests and ignore each other. One repo means the
+`DataStatus` union and the Python code that reasons about the same status values
+cannot drift apart in separate release cycles.
+
+This is not hypothetical caution. The series already hit the subdirectory
+problem once: installing the toolkit from 901education's `toolkit/` subdirectory
+failed on cross-repo auth, which is what forced the extraction recorded in
+[901education decision 3](https://github.com/cardelljo/901education/blob/main/docs/ARCHITECTURE.md).
+Root-level manifests avoid the same class of problem for the JS half.
+
+### What is in scope — deliberately narrow
+
+901education's codebase analysis found **~85% of the frontend is
+domain-specific**, with the genuinely shared remainder being the `_meta`
+provenance contract and the data-status UI. That finding stands and it bounds
+this decision. Extracted:
+
+- the canonical `DataStatus` union
+- `SampleBadge` and `DataStatusPanel`
+- source/citation line rendering
+
+Not extracted: sections, charts, narrative components, branding, layout shell.
+Those are the 85%.
+
+The evidence that the status UI crossed the line is drift already in progress —
+`SampleBadge.tsx` is 57/58/58 lines and `DataStatusPanel.tsx` is 241/242/242
+across the three repos, and the `DataStatus` union is currently byte-identical in
+all three `lib/types.ts` by coincidence, not by any mechanism. Three copies is
+rule-of-three met.
+
+**`lib/choropleth.ts` does not come along yet.** 901economy's task 8 kept it
+dependency-free specifically to be cheap to lift, and that was right — but it is
+still the first real choropleth in the series. Rule-of-three applies to it
+independently of this decision. What changes for task 8 is only that the
+destination now exists and is named; the timing rule is unchanged.
+
+### Mechanics
+
+```
+pyproject.toml     ← Python distribution (unchanged)
+package.json       ← TypeScript package (new, beside it)
+src/toolkit/       ← Python source (unchanged)
+ui/                ← TypeScript components (new, outside src/ so setuptools'
+                     `where = ["src"]` does not try to package it)
+```
+
+- **Install, JS side:** `npm install github:cardelljo/civic-dashboard-kit#<sha>`.
+  SHA pinning works exactly as it does for pip, so both halves pin the same way
+  ([901economy/pyproject.toml](https://github.com/cardelljo/901Economy/blob/main/pyproject.toml)
+  and [901education/scripts/requirements.txt](https://github.com/cardelljo/901education/blob/main/scripts/requirements.txt)
+  pin `351a0bbd` = 0.2.0 today).
+- **Consumption:** ship raw `.tsx` and have consumers add `transpilePackages` in
+  `next.config.js`. No build step, no compiled artifacts committed, nothing to
+  keep in sync.
+- **Versioning:** one repo, one tag, covering both halves. `CHANGELOG.md` entries
+  must name which half changed, because a JS consumer reading it will otherwise
+  see Python-only releases it has no reason to act on.
+- **CI runs both suites.** A JS-only change must not be able to ship without the
+  Python tests, or vice versa.
+
+### The honest cost
+
+**The repo stops being one thing.** A contributor now has to know which half
+they are touching, the CI is two toolchains, and an npm git install clones the
+Python source it will never use. Version coupling is real: a Python-only release
+still moves the tag JS consumers see. SHA pinning bounds that — consumers only
+move when they choose to — but it puts the burden on the CHANGELOG to be honest
+about scope, which is a discipline, not a guarantee.
+
+The alternative (a second repo) trades that for a worse failure: two repos whose
+status vocabularies drift, which is the exact problem being fixed.
+
+### What this does not change
+
+**The static-data philosophy is untouched.** These components are presentational
+— they receive already-imported JSON as props. No component in this package
+fetches anything, and no dashboard frontend queries a database or an API. Each
+site still imports pre-built JSON at build time. If that ever changes it will be
+a separate decision, argued on its own.
+
+Also unchanged: fork-per-dashboard (this is a shared *library*, not a platform —
+the same model already applied to the Python toolkit); the per-dashboard store
+choice in §1; the Python distribution name and its `toolkit.*` import path.
+
+**Adoption is opt-in, and 901justice specifically is not on a schedule.** It is
+a live site with a daily cron, no test suite, and type checks disabled. Its
+existing duplicate components keep working indefinitely. Nothing here obliges any
+dashboard to migrate on someone else's timeline.
+
+### What does not go in this repo
+
+**The admin application is a separate repo.** It is an application, not a
+library: no dashboard installs it, and bundling it would drag its dependency tree
+into every git clone. That is the reason — not secrecy. Its configuration belongs
+in environment variables regardless of where the source lives.
