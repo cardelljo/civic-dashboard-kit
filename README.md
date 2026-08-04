@@ -16,6 +16,13 @@ where every published figure came from, and never let sample or unreviewed
 data pass as live — and kept re-solving them separately until a shared
 package made more sense than a third copy-paste.
 
+> **Scope:** this package is Python today. A decision is recorded to also
+> publish a small TypeScript package — the canonical `DataStatus` union and the
+> data-status UI — from this same repo, installed via npm from git alongside the
+> pip install. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7 for scope,
+> mechanics, and cost. Everything below describes the Python half, which the
+> TypeScript half does not change.
+
 ## Why this exists
 
 Most dashboard tooling optimizes for showing a number. This one optimizes
