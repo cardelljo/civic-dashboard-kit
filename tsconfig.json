@@ -1,0 +1,28 @@
+{
+  // Type-checking only -- `tsc --noEmit`. This package ships raw .tsx and has
+  // no build step, so there is no emit configuration to get wrong. Consumers
+  // compile it themselves via `transpilePackages` (docs/ARCHITECTURE.md §7).
+  //
+  // Settings mirror the three dashboards' tsconfig.json (Next 14.2.35,
+  // strict, jsx: preserve, moduleResolution: bundler) so a type error here is
+  // a type error there. `jsx: preserve` is what Next uses; tsc only needs it
+  // to parse, since nothing is emitted.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["ui/**/*.ts", "ui/**/*.tsx", "tests/ui/**/*.tsx"],
+  "exclude": ["node_modules"]
+}

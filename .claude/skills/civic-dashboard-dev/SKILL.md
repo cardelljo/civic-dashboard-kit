@@ -19,8 +19,9 @@ split matters because the audiences differ:
 **Delegates never load this skill.** If a rule must reach Codex, it goes in `AGENTS.md`.
 Change operational test rules there first; this file summarizes.
 
-*Only 901economy has an `AGENTS.md` today. 901justice and 901education have no agent
-instructions at all — worth fixing when either next gets real work.*
+*All three dashboards now have an `AGENTS.md`, and they differ deliberately — a rule that
+holds for one is not assumed to hold for the others. Read the one in the repo you are
+editing; do not carry a non-negotiable across repos from memory.*
 
 ## 1. Verify, then claim
 

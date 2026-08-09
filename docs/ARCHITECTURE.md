@@ -188,18 +188,37 @@ domain-specific**, with the genuinely shared remainder being the `_meta`
 provenance contract and the data-status UI. That finding stands and it bounds
 this decision. Extracted:
 
-- the canonical `DataStatus` union
+- the canonical `DataStatus` union, and `resolveStatus()` — the
+  `status ?? (isSample ? 'sample' : 'live')` fallback every consumer of a
+  pre-`status` snapshot needs
 - `SampleBadge` and `DataStatusPanel`
-- source/citation line rendering
 
 Not extracted: sections, charts, narrative components, branding, layout shell.
 Those are the 85%.
 
-The evidence that the status UI crossed the line is drift already in progress —
-`SampleBadge.tsx` is 57/58/58 lines and `DataStatusPanel.tsx` is 241/242/242
-across the three repos, and the `DataStatus` union is currently byte-identical in
-all three `lib/types.ts` by coincidence, not by any mechanism. Three copies is
-rule-of-three met.
+**Source/citation line rendering was listed here and is struck — it is not
+shared code.** Building the extraction established that it does not exist as a
+component in any of the three repos. What exists is inline JSX welded to domain
+layout, in three different shapes: 901education renders
+`<p className="data-note">Source: {source}, {vintage}</p>` (plain text, no
+link) in 4 section components; 901justice renders an anchor with an
+`ExternalLink` icon interleaved with domain prose
+(`Shelby County Jail — {reportMonth} · Source: …`) in 6; and 901economy contains
+no `Source:` literal at all, composing vintage inline inside `KpiCard` and
+`TwoClauseFinding` instead. Extracting it would mean *designing* a new component
+and rewriting ten domain call sites to fit it — which is neither an extraction
+nor narrow. It stays per dashboard until three call sites actually converge on
+one shape.
+
+The evidence that the status UI crossed the line is duplication, not drift.
+Measured at 901economy `bd3f1bb1`, 901education `5399247c`, 901justice
+`a7cdf9f4`: `SampleBadge.tsx` is 57/58/58 lines and `DataStatusPanel.tsx` is
+241/242/242, but **the whole of that difference is one line** — justice imports
+`DataStatus` from `@/lib/types`, the other two declare it locally. `diff` is
+otherwise empty across all three. So the earlier "drift already in progress"
+framing overstated it: what the three repos have is three byte-identical copies
+held in sync by nothing. That is a cleaner case for extraction than drift would
+be — the lift needed no reconciliation — and rule-of-three is met either way.
 
 **`lib/choropleth.ts` does not come along yet.** 901economy's task 8 kept it
 dependency-free specifically to be cheap to lift, and that was right — but it is
@@ -218,6 +237,8 @@ ui/                ← TypeScript components (new, outside src/ so setuptools'
 ```
 
 - **Install, JS side:** `npm install github:cardelljo/civic-dashboard-kit#<sha>`.
+  Package name `civic-dashboard-kit`, single entry point — everything imports
+  from the package root, `import { SampleBadge } from 'civic-dashboard-kit'`.
   SHA pinning works exactly as it does for pip, so both halves pin the same way
   ([901economy/pyproject.toml](https://github.com/cardelljo/901Economy/blob/main/pyproject.toml)
   and [901education/scripts/requirements.txt](https://github.com/cardelljo/901education/blob/main/scripts/requirements.txt)
@@ -230,6 +251,46 @@ ui/                ← TypeScript components (new, outside src/ so setuptools'
   see Python-only releases it has no reason to act on.
 - **CI runs both suites.** A JS-only change must not be able to ship without the
   Python tests, or vice versa.
+
+### What building it changed
+
+**The union is now actually canonical. It was not before.** This section
+justified one repo partly on the grounds that it "keeps the `DataStatus` union
+next to the Python code reasoning about the same values" — but on the Python
+side `status` was an unconstrained `str` (`build_meta(status: str = "live")`),
+and `validate_meta` only checked that it was non-empty. There was nothing for
+the TypeScript union to be pinned to; `status="livee"` was a valid snapshot.
+So:
+
+- `snapshot.DATA_STATUSES` enumerates the six values, and both `build_meta` and
+  `validate_meta` reject anything else. Verified against every committed
+  `_meta.status` in all three dashboards first — all on the union, so nothing
+  newly fails. (901justice's `data/doj_findings.json` carries `published` /
+  `not_linked` / `not_available`, but those are domain milestone statuses on
+  `responseMilestones[]`, not `_meta.status`.)
+- `tests/test_data_status_union.py` parses `ui/types.ts` and fails if the two
+  lists stop matching. It runs in the **Python** job, so a JS-only change that
+  adds a status still has to add it to Python. This is the mechanism the
+  one-repo decision claimed; until it existed the claim was an intention.
+
+**Two adoption requirements that fail silently.** Both are consumer-side config,
+neither is caught by any test in this repo:
+
+1. **Tailwind must scan the package.** Tailwind 3 generates only the classes it
+   finds in `content` globs, and does not scan `node_modules`. Without
+   `'./node_modules/civic-dashboard-kit/ui/**/*.{js,ts,jsx,tsx}'` added to
+   `content`, the components mount correctly and render **unstyled**.
+2. **`brand.blue` must exist.** `DataStatusPanel` uses `text-brand-blue` for its
+   two verify links. All three dashboards define it today, so this is a
+   documented requirement rather than a change — but it means the package is not
+   theme-free, and a fourth dashboard without that token gets inherited-color
+   links.
+
+**Adoption order is not a matter of taste.** Adopt in **901economy or
+901education first, never 901justice first.** Justice is a live site with a
+daily cron, no test suite, and `typescript.ignoreBuildErrors: true` — its
+`npm run build` passes *through* type errors, so it structurally cannot verify
+the swap. A repo with a real gate proves the package before the one that can't.
 
 ### The honest cost
 

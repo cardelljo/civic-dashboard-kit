@@ -16,12 +16,14 @@ where every published figure came from, and never let sample or unreviewed
 data pass as live — and kept re-solving them separately until a shared
 package made more sense than a third copy-paste.
 
-> **Scope:** this package is Python today. A decision is recorded to also
-> publish a small TypeScript package — the canonical `DataStatus` union and the
-> data-status UI — from this same repo, installed via npm from git alongside the
-> pip install. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7 for scope,
-> mechanics, and cost. Everything below describes the Python half, which the
-> TypeScript half does not change.
+> **Scope: this package has two halves, published from this one repo.** A
+> Python distribution installed with pip (`pyproject.toml`, imports as
+> `toolkit.*`) and a small TypeScript package installed with npm
+> (`package.json`, `ui/`) — the canonical `DataStatus` union and the data-status
+> UI that renders it. Everything below describes the Python half except
+> [Adopting the TypeScript half](#adopting-the-typescript-half); the two share a
+> repo so the status vocabulary cannot drift, and
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7 records why, with the cost.
 
 ## Why this exists
 
@@ -229,6 +231,86 @@ Once you are on Postgres, how the instance is laid out across dashboards — one
 instance, one schema each, plus a shared PostGIS `geo` schema holding the
 boundary polygons they all plot — is recorded in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Adopting the TypeScript half
+
+Three exports, one import path, no build step:
+
+```tsx
+import {
+  DataStatusPanel, SampleBadge, resolveStatus,
+  type DataSource, type DataStatus,
+} from 'civic-dashboard-kit';
+```
+
+`DataStatus` is the same six values `snapshot.build_meta()` writes and
+`validate_meta()` now enforces — `live`, `mixed`, `sample`, `gap`, `manual`,
+`report-backed`. `resolveStatus({ isSample, status })` is the
+`status ?? (isSample ? 'sample' : 'live')` fallback for snapshots written before
+`status` existed; use it rather than re-deriving the rule, so your own components
+agree with these two.
+
+Both components are presentational. They take already-imported JSON as props and
+fetch nothing, because every dashboard in this series is a static export.
+
+### Install
+
+```
+npm install github:cardelljo/civic-dashboard-kit#351a0bbd     # pin a commit, not #main
+```
+
+Pin the same way the Python side does. `#main` means a push here can break your
+build with no commit in your repo — [CHANGELOG.md](CHANGELOG.md) names which
+half each release touched, so a JS consumer can tell which releases concern it.
+
+### Four steps in the consuming app
+
+Peer dependencies are `react` (18 or 19) and `lucide-react` (≥0.400.0); the
+components import `useState` and six lucide icons and nothing else.
+
+1. **`next.config.js`** — this package ships raw `.tsx`, so Next has to compile
+   it:
+
+   ```js
+   const nextConfig = { transpilePackages: ['civic-dashboard-kit'] };
+   ```
+
+2. **`tailwind.config.ts`** — add the package to `content`, or **the components
+   render unstyled.** Tailwind generates only classes it finds in `content`
+   globs and does not scan `node_modules`. This fails silently: the markup mounts
+   fine and simply has no styling.
+
+   ```ts
+   content: [
+     './pages/**/*.{js,ts,jsx,tsx,mdx}',
+     './components/**/*.{js,ts,jsx,tsx,mdx}',
+     './app/**/*.{js,ts,jsx,tsx,mdx}',
+     './node_modules/civic-dashboard-kit/ui/**/*.{js,ts,jsx,tsx}',
+   ],
+   ```
+
+3. **Define `brand.blue`** in your Tailwind theme. `DataStatusPanel` uses
+   `text-brand-blue` for its two "verify" links. Without the token those links
+   inherit body color — legible, but not obviously links.
+
+4. **Re-point your own `DataStatus`.** If your `lib/types.ts` declares the union,
+   re-export it from here instead of keeping a second copy:
+
+   ```ts
+   export type { DataStatus } from 'civic-dashboard-kit';
+   ```
+
+Then delete `components/data-status/SampleBadge.tsx` and
+`DataStatusPanel.tsx` and update their import sites. The component props are
+unchanged (`<SampleBadge isSample={…} status={…} />`,
+`<DataStatusPanel sources={…} />`), so nothing else moves.
+
+### Verifying the swap
+
+`npm run build` passing is not sufficient evidence in a repo with
+`typescript.ignoreBuildErrors: true` — it will build straight through a type
+error. Run `npx tsc --noEmit` explicitly, and look at the rendered panel: the
+Tailwind step above is the one that fails without erroring.
 
 ## Design principles
 

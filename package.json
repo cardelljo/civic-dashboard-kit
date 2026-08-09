@@ -1,0 +1,47 @@
+{
+  "name": "civic-dashboard-kit",
+  "version": "0.3.0",
+  "description": "The canonical DataStatus union and the data-status provenance UI shared by the 901 civic dashboards. The Python half of this package ships from the same repo via pyproject.toml.",
+  "license": "Apache-2.0",
+  "author": "Bluff City Tech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cardelljo/civic-dashboard-kit.git"
+  },
+  "keywords": [
+    "civic-tech",
+    "open-data",
+    "dashboard",
+    "provenance",
+    "react"
+  ],
+  "main": "ui/index.ts",
+  "types": "ui/index.ts",
+  "exports": {
+    ".": "./ui/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "ui"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "lucide-react": ">=0.400.0",
+    "react": "^18 || ^19"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^18.3.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^24.1.0",
+    "lucide-react": "^0.400.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.0"
+  }
+}
