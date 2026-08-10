@@ -370,9 +370,12 @@ the same model already applied to the Python toolkit); the per-dashboard store
 choice in §1; the Python distribution name and its `toolkit.*` import path.
 
 **Adoption is opt-in, and 901justice specifically is not on a schedule.** It is
-a live site with a daily cron, no test suite, and type checks disabled. Its
-existing duplicate components keep working indefinitely. Nothing here obliges any
-dashboard to migrate on someone else's timeline.
+a live site with a daily cron, and it builds with type errors ignored — so its
+`npm run build` cannot fail on a bad component swap. It does have a Python test
+suite (§8 corrects an earlier claim here that it had none), but a Python suite
+cannot verify a React swap. Its existing duplicate components keep working
+indefinitely, and nothing here obliges any dashboard to migrate on someone else's
+timeline.
 
 ### What does not go in this repo
 
@@ -380,3 +383,71 @@ dashboard to migrate on someone else's timeline.
 library: no dashboard installs it, and bundling it would drag its dependency tree
 into every git clone. That is the reason — not secrecy. Its configuration belongs
 in environment variables regardless of where the source lives.
+
+---
+
+## 8. The verification floor across the three dashboards
+
+**Why this is in the shared file.** A single dashboard's test setup is its own
+business, but "are the three at a consistent floor" is a comparison no one repo
+can hold, and the plan of record was working from a table that had drifted out of
+date. Measured directly from the workflows and configs at 901economy `bd3f1bb1`,
+901education `5399247c`, 901justice `a7cdf9f4`.
+
+### Measured state
+
+| | Type errors fail the build | Python tests on PRs | Frontend tests | CI jobs on a PR |
+|---|---|---|---|---|
+| 901economy | yes | yes — 7 files, with a Postgres service, plus `validate_snapshots.py` | **yes** — vitest, 2 files | `pipeline` + `frontend` (`npm test`, `lint`, `build`) |
+| 901education | yes | yes — 4 files, `pytest -q` | none | `build` + `tests` |
+| 901justice | **no** — `typescript.ignoreBuildErrors` *and* `eslint.ignoreDuringBuilds` | yes — 9 files, `pytest -v --strict-markers` | none | `tests` + `build` |
+
+### Two items on the work list are already done
+
+- **"Add pytest to 901education's build-check.yml."** Already there: a `tests`
+  job installs `scripts/requirements-dev.txt` and runs `pytest -q`. The earlier
+  note that it "never installs requirements.txt" is wrong in a way worth
+  recording — `requirements-dev.txt` begins with `-r requirements.txt`, so the
+  pinned `civic-dashboard-kit` commit *is* installed and exercised on every PR.
+  That makes education's CI a real gate on a bad toolkit pin, which was the
+  concern behind the item.
+- **"Start a test suite in 901justice."** Already there: 9 files, added with the
+  ArcGIS consolidation, running on `pull_request`. An earlier revision of this
+  document (§7) described justice as having "no test suite"; that is corrected.
+
+### What is actually still uneven
+
+1. **Frontend tests exist in one repo of three.** Only economy runs any (vitest,
+   2 files). Education and justice have zero `*.test.tsx`. This is the gap that
+   matters for the `ui/` adoption in §7 — and it is why adoption order is not
+   arbitrary.
+2. **901justice verifies nothing about its frontend.** With both
+   `ignoreBuildErrors` and `ignoreDuringBuilds` set, `npm run build` passes
+   through type *and* lint errors. **This is a deliberate judgment call about a
+   live site, not an oversight — do not flip it without a decision.** The
+   consequence to plan around is narrow: justice cannot self-verify a frontend
+   change, so a frontend change should be proven elsewhere first.
+3. **901economy's CI Postgres is `postgres:16`, not a PostGIS image.** Harmless
+   today, but §3 provisions the shared instance from `postgis/postgis:16-*`, so
+   the first test touching PostGIS would fail in CI while passing against the
+   real database — the confusing direction. This package's own CI moved to
+   `postgis/postgis:16-3.4`; economy's is its own call.
+
+### The floor itself
+
+Four requirements, each of which exists because it has already failed here:
+
+- **A skipped test is not a passing test.** `pytest` exits 0 when every database
+  test skips for want of a connection string. Assert the environment rather than
+  trusting the exit code — this repo's `tests/test_ci_guards.py` is the worked
+  exemplar, and it deliberately lives outside `test_postgres_store.py` because
+  that module's `pytestmark` would skip the guard in exactly the case it detects.
+- **Zero checks is not a pass.** Confirm *which* checks ran, not that the badge
+  is green.
+- **A pipe destroys an exit code.** `pytest ... | tail -2 && git commit` commits
+  on failure.
+- **A test that has never failed may assert nothing.** Break the code
+  deliberately and confirm the suite goes red.
+
+Whether each repo's suite can currently all-skip has **not** been verified here;
+only its configuration has.
