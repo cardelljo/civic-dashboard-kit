@@ -234,12 +234,12 @@ boundary polygons they all plot — is recorded in
 
 ## Adopting the TypeScript half
 
-Three exports, one import path, no build step:
+One import path, no build step:
 
 ```tsx
 import {
-  DataStatusPanel, SampleBadge, resolveStatus,
-  type DataSource, type DataStatus,
+  DataStatusPanel, SampleBadge, SourceLine, resolveStatus,
+  type DataSource, type DataStatus, type SourceLineProps,
 } from 'civic-dashboard-kit';
 ```
 
@@ -250,8 +250,48 @@ import {
 `status` existed; use it rather than re-deriving the rule, so your own components
 agree with these two.
 
-Both components are presentational. They take already-imported JSON as props and
-fetch nothing, because every dashboard in this series is a static export.
+All three components are presentational. They take already-imported JSON as props
+and fetch nothing, because every dashboard in this series is a static export.
+
+### `SourceLine` — the standard attribution line
+
+Every figure is supposed to carry source and vintage. This fixes *how*:
+
+```tsx
+<SourceLine
+  source="BEA Regional GDP"          // optional — vintage is promoted if absent
+  vintage="2023"                     // optional — but not both
+  sourceUrl="https://apps.bea.gov/…" // optional; wraps the source name
+  geography="Memphis MSA"            // optional trailing context
+  caveat="Revised quarterly."        // optional; accepts markup
+/>
+// → Source: BEA Regional GDP↗ · 2023 · Memphis MSA Revised quarterly.
+```
+
+Separators are `·` so an absent field leaves no stray punctuation. The form is
+deliberately not configurable — a standard each dashboard restyles isn't one.
+What *is* local: `className` defaults to `data-note`, which every dashboard
+already defines with its own muted color, so the line picks up local theming
+without importing a palette. Pass `className` to place it in a different slot
+(justice's section subheaders, say).
+
+**Attribution and caveats are separate values.** Today most caveats are fused
+into the attribution string — `note="Source: TDOE TCAP Assessment Files. 2019-20
+canceled and 2020-21 disrupted by COVID; treat those years with caution."` — which
+makes them unsearchable and inconsistent. Split them:
+
+```tsx
+<SourceLine
+  source="TDOE TCAP Assessment Files"
+  vintage="2023-24"
+  caveat="2019-20 canceled and 2020-21 disrupted by COVID; treat those years with caution."
+/>
+```
+
+Not every `Source:` in your code is attribution. Some are genuine prose
+paragraphs that happen to open with the word — those stay prose. Convert the
+lines that are really *name + vintage + link*; see `docs/ARCHITECTURE.md` §7.1
+for the inventory that drew the line.
 
 ### Install
 
@@ -311,6 +351,16 @@ unchanged (`<SampleBadge isSample={…} status={…} />`,
 `typescript.ignoreBuildErrors: true` — it will build straight through a type
 error. Run `npx tsc --noEmit` explicitly, and look at the rendered panel: the
 Tailwind step above is the one that fails without erroring.
+
+Two different kinds of change here, worth reviewing differently:
+
+- **`SampleBadge` / `DataStatusPanel` are a like-for-like lift.** Props are
+  unchanged and the markup is identical to what your repo already had, so a clean
+  type-check plus a rendered page is enough.
+- **`SourceLine` changes what visitors see.** It standardizes a line the three
+  dashboards render three ways, so adopting it *should* alter your output —
+  `Source:` may move, punctuation changes, caveats separate from attribution.
+  Read the diff on the page, not just the build log.
 
 ## Design principles
 

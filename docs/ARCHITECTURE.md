@@ -192,23 +192,11 @@ this decision. Extracted:
   `status ?? (isSample ? 'sample' : 'live')` fallback every consumer of a
   pre-`status` snapshot needs
 - `SampleBadge` and `DataStatusPanel`
+- `SourceLine` — the standard attribution line (see §7.1; this one is a
+  standardization, not a lift)
 
 Not extracted: sections, charts, narrative components, branding, layout shell.
 Those are the 85%.
-
-**Source/citation line rendering was listed here and is struck — it is not
-shared code.** Building the extraction established that it does not exist as a
-component in any of the three repos. What exists is inline JSX welded to domain
-layout, in three different shapes: 901education renders
-`<p className="data-note">Source: {source}, {vintage}</p>` (plain text, no
-link) in 4 section components; 901justice renders an anchor with an
-`ExternalLink` icon interleaved with domain prose
-(`Shelby County Jail — {reportMonth} · Source: …`) in 6; and 901economy contains
-no `Source:` literal at all, composing vintage inline inside `KpiCard` and
-`TwoClauseFinding` instead. Extracting it would mean *designing* a new component
-and rewriting ten domain call sites to fit it — which is neither an extraction
-nor narrow. It stays per dashboard until three call sites actually converge on
-one shape.
 
 The evidence that the status UI crossed the line is duplication, not drift.
 Measured at 901economy `bd3f1bb1`, 901education `5399247c`, 901justice
@@ -225,6 +213,71 @@ dependency-free specifically to be cheap to lift, and that was right — but it 
 still the first real choropleth in the series. Rule-of-three applies to it
 independently of this decision. What changes for task 8 is only that the
 destination now exists and is named; the timing rule is unchanged.
+
+## 7.1 The source line is standardized, not extracted
+
+**These are two different arguments and only one of them is rule-of-three.**
+Extraction asks whether the same code exists three times; standardization asks
+whether three dashboards should present the same thing the same way. The
+attribution line fails the first test and passes the second, and the second is
+the one that matters for it — "every figure carries source and vintage" is
+already a stated non-negotiable in each repo, but nothing said *how*, so three
+repos answered differently and no rule was checkable.
+
+An earlier revision of §7 struck the source line on the grounds that there was
+no shared code to lift. That was true and beside the point.
+
+### What the inventory found
+
+Ten `Source:` call sites across the three repos are not ten attribution lines.
+They are three different kinds of thing sharing a prefix:
+
+| Kind | Sites | Example |
+|---|---|---|
+| Structured attribution — name, vintage, link | 4 | justice `JailSection`: `Shelby County Jail — {reportMonth} · Source: {source}↗` |
+| Attribution fused to a methodology caveat | 4 | education `AcademicOutcomesSection`: `note="Source: TDOE TCAP Assessment Files. 2019-20 canceled and 2020-21 disrupted by COVID; treat those years with caution."` |
+| Prose that merely begins with the word | 2 | justice `CommunitySection`: six lines on what is and is not machine-extracted |
+
+So the standard has to **split structured attribution from caveat prose**. That
+split is most of the value: a caveat baked into a string literal cannot be
+searched, audited, or shown consistently, and today most of them are.
+
+### The standard
+
+```
+Source: {source}↗ · {vintage} · {geography}   [caveat]
+```
+
+- **`·` rather than commas**, so an absent `vintage` or `geography` drops out
+  without leaving stray punctuation.
+- **The link wraps the source name** — the thing a reader clicks to verify a
+  figure. 901economy currently links the vintage instead, which is less
+  discoverable.
+- **The form is fixed.** A standard each dashboard restyles is not a standard.
+  What *is* local: the component defaults to the `data-note` class, which all
+  three repos already define in `globals.css` with their own muted color, so the
+  line inherits local theming without importing a palette.
+- **`caveat` accepts markup**, because justice's caveats contain links.
+
+### A source name is optional, and that is a concession to real data
+
+901economy has **no per-row publisher name**. Its rows carry
+`source_key: 'bea-gdp'` and `source_url`; the only human-readable name in its
+`_meta` is `sourceName: "Postgres indicators_current"`, which names its own
+pipeline, not the publisher. That is *why* it renders `{vintage} · {geography}`
+rather than a source name.
+
+So `source` is optional and `vintage` is promoted into the primary slot when it
+is absent. Requiring a name would have blocked economy's adoption behind a
+`source_key` → display-name registry for ~30 sources. Uniform shape now, complete
+content later; building that registry is 901economy's own follow-up, not a
+prerequisite.
+
+**Adoption changes what visitors see**, unlike the data-status lift. Justice's
+subheaders reorder (`Source:` moves to the front), education's four `note=`
+strings split into attribution plus caveat, and economy's lines gain the
+`Source:` label. That is the point of standardizing, but it means each adoption
+is a visible change to review on the page, not just a green build.
 
 ### Mechanics
 

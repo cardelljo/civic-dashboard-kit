@@ -24,6 +24,17 @@ able to tell at a glance whether a release concerns it.
   `bd3f1bb1`. The three dashboards' copies were byte-identical apart from
   whether `DataStatus` was declared locally or imported, so the props are
   unchanged and adoption is a swap of import paths.
+- `ui/SourceLine.tsx` — the standard attribution line,
+  `Source: {source}↗ · {vintage} · {geography}` plus a separate `caveat` slot.
+  **Not a lift.** Nothing shared existed: an inventory of ten `Source:` call
+  sites found three different kinds of thing sharing a prefix — structured
+  attribution (4), attribution fused to a methodology caveat (4), and prose that
+  merely opens with the word (2). This owns the first and gives the caveat its own
+  value instead of a string literal. `source` is optional because 901economy has
+  no per-row publisher name; vintage is promoted when it is absent. Rationale and
+  the inventory are in docs/ARCHITECTURE.md §7.1.
+  - Unlike the two data-status components, **adopting this changes rendered
+    output** — that is what standardizing means here. Review it on the page.
 - Ships raw `.tsx`, no build step. Consumers add `transpilePackages` and — this
   one fails silently — add the package to their Tailwind `content` globs, or the
   components render unstyled. See the README's "Adopting the TypeScript half".
@@ -52,8 +63,10 @@ able to tell at a glance whether a release concerns it.
   `env:` block read as a passing build. It lives in its own module because
   `test_postgres_store.py`'s module-level `pytestmark` would skip the guard in
   exactly the case it detects.
-- A `typescript` CI job: `tsc --noEmit` and `vitest run` (16 tests over the two
-  components and `resolveStatus`).
+- A `typescript` CI job: `tsc --noEmit` and `vitest run` (28 tests over the three
+  components and `resolveStatus`). `SourceLine`'s tests assert the rendered text
+  including separator placement, since the fixed form is the thing being
+  standardized.
 - The Python job's Postgres service is now `postgis/postgis:16-3.4` rather than
   `postgres:16`, matching the image the shared instance is provisioned from
   (§3), so a future test needing PostGIS does not need a CI change first.

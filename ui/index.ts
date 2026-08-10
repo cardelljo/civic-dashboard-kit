@@ -17,3 +17,6 @@ export { resolveStatus } from './types';
 export { default as SampleBadge } from './SampleBadge';
 export { default as DataStatusPanel } from './DataStatusPanel';
 export type { DataSource } from './DataStatusPanel';
+
+export { default as SourceLine } from './SourceLine';
+export type { SourceLineProps } from './SourceLine';
