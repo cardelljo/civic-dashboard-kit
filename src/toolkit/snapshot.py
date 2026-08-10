@@ -30,6 +30,24 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 
+#: The valid `_meta.status` values, and the Python half of the canonical
+#: `DataStatus` union. The TypeScript half is `ui/types.ts`, and
+#: `tests/test_data_status_union.py` fails if the two stop agreeing -- that
+#: test is the mechanism docs/ARCHITECTURE.md §7 claims when it justifies
+#: shipping both halves from one repo. Before it existed, `status` was an
+#: unconstrained `str` here, so there was nothing for the TypeScript union to
+#: drift *from*.
+#:
+#: Order matches ui/types.ts, which the union test relies on.
+DATA_STATUSES = (
+    "live",
+    "mixed",
+    "sample",
+    "gap",
+    "manual",
+    "report-backed",
+)
+
 
 class SnapshotError(Exception):
     pass
@@ -65,6 +83,8 @@ def build_meta(
     `validate_meta` does not require it, so 901justice/901education's current
     data files stay contract-compliant without being touched.
     """
+    require(status in DATA_STATUSES,
+            f"unknown status {status!r}; expected one of {', '.join(DATA_STATUSES)}")
     fetched_at = fetched_at or datetime.now().isoformat(timespec="seconds")
     run: dict[str, Any] = {
         "sourceKey": source_key,
@@ -169,6 +189,12 @@ def validate_meta(path: str, data: dict[str, Any], expected_source_key: str,
         require(isinstance(meta.get("isSample"), bool),
                 f"{path}: _meta.isSample must be a boolean")
         require(bool(meta.get("status")), f"{path}: missing _meta.status")
+        # Membership, not just presence: a typo'd or invented status renders as
+        # 'sample' in the frontend's fallback path, which is the one direction
+        # this contract must never fail silently in.
+        require(meta.get("status") in DATA_STATUSES,
+                f"{path}: unknown _meta.status {meta.get('status')!r}; "
+                f"expected one of {', '.join(DATA_STATUSES)}")
     require(bool(meta.get("lastFetched")), f"{path}: missing _meta.lastFetched")
     require(bool(meta.get("fetchedBy")), f"{path}: missing _meta.fetchedBy")
     require(bool(meta.get("howToUpdate")), f"{path}: missing _meta.howToUpdate")

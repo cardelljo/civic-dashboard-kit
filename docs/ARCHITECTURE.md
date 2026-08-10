@@ -188,24 +188,96 @@ domain-specific**, with the genuinely shared remainder being the `_meta`
 provenance contract and the data-status UI. That finding stands and it bounds
 this decision. Extracted:
 
-- the canonical `DataStatus` union
+- the canonical `DataStatus` union, and `resolveStatus()` — the
+  `status ?? (isSample ? 'sample' : 'live')` fallback every consumer of a
+  pre-`status` snapshot needs
 - `SampleBadge` and `DataStatusPanel`
-- source/citation line rendering
+- `SourceLine` — the standard attribution line (see §7.1; this one is a
+  standardization, not a lift)
 
 Not extracted: sections, charts, narrative components, branding, layout shell.
 Those are the 85%.
 
-The evidence that the status UI crossed the line is drift already in progress —
-`SampleBadge.tsx` is 57/58/58 lines and `DataStatusPanel.tsx` is 241/242/242
-across the three repos, and the `DataStatus` union is currently byte-identical in
-all three `lib/types.ts` by coincidence, not by any mechanism. Three copies is
-rule-of-three met.
+The evidence that the status UI crossed the line is duplication, not drift.
+Measured at 901economy `bd3f1bb1`, 901education `5399247c`, 901justice
+`a7cdf9f4`: `SampleBadge.tsx` is 57/58/58 lines and `DataStatusPanel.tsx` is
+241/242/242, but **the whole of that difference is one line** — justice imports
+`DataStatus` from `@/lib/types`, the other two declare it locally. `diff` is
+otherwise empty across all three. So the earlier "drift already in progress"
+framing overstated it: what the three repos have is three byte-identical copies
+held in sync by nothing. That is a cleaner case for extraction than drift would
+be — the lift needed no reconciliation — and rule-of-three is met either way.
 
 **`lib/choropleth.ts` does not come along yet.** 901economy's task 8 kept it
 dependency-free specifically to be cheap to lift, and that was right — but it is
 still the first real choropleth in the series. Rule-of-three applies to it
 independently of this decision. What changes for task 8 is only that the
 destination now exists and is named; the timing rule is unchanged.
+
+## 7.1 The source line is standardized, not extracted
+
+**These are two different arguments and only one of them is rule-of-three.**
+Extraction asks whether the same code exists three times; standardization asks
+whether three dashboards should present the same thing the same way. The
+attribution line fails the first test and passes the second, and the second is
+the one that matters for it — "every figure carries source and vintage" is
+already a stated non-negotiable in each repo, but nothing said *how*, so three
+repos answered differently and no rule was checkable.
+
+An earlier revision of §7 struck the source line on the grounds that there was
+no shared code to lift. That was true and beside the point.
+
+### What the inventory found
+
+Ten `Source:` call sites across the three repos are not ten attribution lines.
+They are three different kinds of thing sharing a prefix:
+
+| Kind | Sites | Example |
+|---|---|---|
+| Structured attribution — name, vintage, link | 4 | justice `JailSection`: `Shelby County Jail — {reportMonth} · Source: {source}↗` |
+| Attribution fused to a methodology caveat | 4 | education `AcademicOutcomesSection`: `note="Source: TDOE TCAP Assessment Files. 2019-20 canceled and 2020-21 disrupted by COVID; treat those years with caution."` |
+| Prose that merely begins with the word | 2 | justice `CommunitySection`: six lines on what is and is not machine-extracted |
+
+So the standard has to **split structured attribution from caveat prose**. That
+split is most of the value: a caveat baked into a string literal cannot be
+searched, audited, or shown consistently, and today most of them are.
+
+### The standard
+
+```
+Source: {source}↗ · {vintage} · {geography}   [caveat]
+```
+
+- **`·` rather than commas**, so an absent `vintage` or `geography` drops out
+  without leaving stray punctuation.
+- **The link wraps the source name** — the thing a reader clicks to verify a
+  figure. 901economy currently links the vintage instead, which is less
+  discoverable.
+- **The form is fixed.** A standard each dashboard restyles is not a standard.
+  What *is* local: the component defaults to the `data-note` class, which all
+  three repos already define in `globals.css` with their own muted color, so the
+  line inherits local theming without importing a palette.
+- **`caveat` accepts markup**, because justice's caveats contain links.
+
+### A source name is optional, and that is a concession to real data
+
+901economy has **no per-row publisher name**. Its rows carry
+`source_key: 'bea-gdp'` and `source_url`; the only human-readable name in its
+`_meta` is `sourceName: "Postgres indicators_current"`, which names its own
+pipeline, not the publisher. That is *why* it renders `{vintage} · {geography}`
+rather than a source name.
+
+So `source` is optional and `vintage` is promoted into the primary slot when it
+is absent. Requiring a name would have blocked economy's adoption behind a
+`source_key` → display-name registry for ~30 sources. Uniform shape now, complete
+content later; building that registry is 901economy's own follow-up, not a
+prerequisite.
+
+**Adoption changes what visitors see**, unlike the data-status lift. Justice's
+subheaders reorder (`Source:` moves to the front), education's four `note=`
+strings split into attribution plus caveat, and economy's lines gain the
+`Source:` label. That is the point of standardizing, but it means each adoption
+is a visible change to review on the page, not just a green build.
 
 ### Mechanics
 
@@ -218,6 +290,8 @@ ui/                ← TypeScript components (new, outside src/ so setuptools'
 ```
 
 - **Install, JS side:** `npm install github:cardelljo/civic-dashboard-kit#<sha>`.
+  Package name `civic-dashboard-kit`, single entry point — everything imports
+  from the package root, `import { SampleBadge } from 'civic-dashboard-kit'`.
   SHA pinning works exactly as it does for pip, so both halves pin the same way
   ([901economy/pyproject.toml](https://github.com/cardelljo/901Economy/blob/main/pyproject.toml)
   and [901education/scripts/requirements.txt](https://github.com/cardelljo/901education/blob/main/scripts/requirements.txt)
@@ -230,6 +304,46 @@ ui/                ← TypeScript components (new, outside src/ so setuptools'
   see Python-only releases it has no reason to act on.
 - **CI runs both suites.** A JS-only change must not be able to ship without the
   Python tests, or vice versa.
+
+### What building it changed
+
+**The union is now actually canonical. It was not before.** This section
+justified one repo partly on the grounds that it "keeps the `DataStatus` union
+next to the Python code reasoning about the same values" — but on the Python
+side `status` was an unconstrained `str` (`build_meta(status: str = "live")`),
+and `validate_meta` only checked that it was non-empty. There was nothing for
+the TypeScript union to be pinned to; `status="livee"` was a valid snapshot.
+So:
+
+- `snapshot.DATA_STATUSES` enumerates the six values, and both `build_meta` and
+  `validate_meta` reject anything else. Verified against every committed
+  `_meta.status` in all three dashboards first — all on the union, so nothing
+  newly fails. (901justice's `data/doj_findings.json` carries `published` /
+  `not_linked` / `not_available`, but those are domain milestone statuses on
+  `responseMilestones[]`, not `_meta.status`.)
+- `tests/test_data_status_union.py` parses `ui/types.ts` and fails if the two
+  lists stop matching. It runs in the **Python** job, so a JS-only change that
+  adds a status still has to add it to Python. This is the mechanism the
+  one-repo decision claimed; until it existed the claim was an intention.
+
+**Two adoption requirements that fail silently.** Both are consumer-side config,
+neither is caught by any test in this repo:
+
+1. **Tailwind must scan the package.** Tailwind 3 generates only the classes it
+   finds in `content` globs, and does not scan `node_modules`. Without
+   `'./node_modules/civic-dashboard-kit/ui/**/*.{js,ts,jsx,tsx}'` added to
+   `content`, the components mount correctly and render **unstyled**.
+2. **`brand.blue` must exist.** `DataStatusPanel` uses `text-brand-blue` for its
+   two verify links. All three dashboards define it today, so this is a
+   documented requirement rather than a change — but it means the package is not
+   theme-free, and a fourth dashboard without that token gets inherited-color
+   links.
+
+**Adoption order is not a matter of taste.** Adopt in **901economy or
+901education first, never 901justice first.** Justice is a live site with a
+daily cron, no test suite, and `typescript.ignoreBuildErrors: true` — its
+`npm run build` passes *through* type errors, so it structurally cannot verify
+the swap. A repo with a real gate proves the package before the one that can't.
 
 ### The honest cost
 
