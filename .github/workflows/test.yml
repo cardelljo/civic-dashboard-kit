@@ -14,10 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # postgis/postgis rather than plain postgres:16 -- same image family the
-        # shared instance is provisioned from (docs/ARCHITECTURE.md §3), so a
-        # test that starts depending on PostGIS does not need a CI change first.
-        image: postgis/postgis:16-3.4
+        # Exactly the image the Coolify host runs (docs/ARCHITECTURE.md §3), not
+        # merely the same family: matching the major version is what makes this
+        # job evidence about the database `postgres_store` will really write to,
+        # and matching PostGIS means a test that starts depending on it needs no
+        # CI change first.
+        image: postgis/postgis:18-3.6-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

@@ -82,9 +82,26 @@ PostGIS moves the *source of truth*, not the delivery mechanism.
 
 **Provision from a PostGIS-capable image even before the extension is needed.**
 `CREATE EXTENSION postgis;` is trivial on an image that supports it; swapping
-the image under a running database later is not. Use `postgis/postgis:16-*`
-rather than plain `postgres:16` — same Postgres 16 this package's
-`postgres_store` was tested against.
+the image under a running database later is not.
+
+**The image is `postgis/postgis:18-3.6-alpine`** — what the Coolify host actually
+runs, so CI in this repo matches it rather than an aspiration. This supersedes an
+earlier `postgis/postgis:16-*` recommendation written when `postgres_store` had
+only been exercised against Postgres 16. Nothing in `db/schema.sql` or
+`postgres_store` is version-sensitive: between them they use `TEXT`,
+`TIMESTAMPTZ`, `BOOLEAN`, `BIGSERIAL`, `JSONB`, `NUMERIC` and one `DISTINCT ON`,
+with no `ON CONFLICT`, `MERGE`, window function, or `LATERAL` anywhere. All of
+that predates 16.
+
+**One initdb-time choice the alpine variant forces: collation.** musl has minimal
+locale support, so Postgres there gives you **C collation** unless the ICU
+provider is selected at `initdb`. Collation is fixed at that moment — changing it
+later means a reindex or a dump-and-reload, the same class of irreversibility as
+the image swap above. C is fine for this data (`period` is `YYYY` / `YYYY-MM` /
+`YYYY-QN`, designed to sort as text; `indicator_id`, `geo_key` and `source_key`
+are ASCII; `indicators_current` breaks ties on a timestamp). It only shows up in
+locale-aware ordering of display names — accept it knowingly rather than discover
+it.
 
 ## 4. The shared `geo` schema
 
@@ -427,11 +444,14 @@ date. Measured directly from the workflows and configs at 901economy `bd3f1bb1`,
    live site, not an oversight — do not flip it without a decision.** The
    consequence to plan around is narrow: justice cannot self-verify a frontend
    change, so a frontend change should be proven elsewhere first.
-3. **901economy's CI Postgres is `postgres:16`, not a PostGIS image.** Harmless
-   today, but §3 provisions the shared instance from `postgis/postgis:16-*`, so
-   the first test touching PostGIS would fail in CI while passing against the
-   real database — the confusing direction. This package's own CI moved to
-   `postgis/postgis:16-3.4`; economy's is its own call.
+3. **901economy's CI Postgres is `postgres:16`; the real instance is
+   `postgis/postgis:18-3.6-alpine`.** Two divergences in one, and the major
+   version is the bigger of them: economy's suite has never run against the
+   Postgres its pipeline will actually write to. Harmless so far — nothing in its
+   schema is version-sensitive (§3) — but the first PostGIS-touching test would
+   fail in CI while passing against the real database, which is the confusing
+   direction. This package's own CI matches the host image; economy's is its own
+   call, and its own repo.
 
 ### The floor itself
 

@@ -6,6 +6,17 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Changed — CI
+
+- The Python job's Postgres service is `postgis/postgis:18-3.6-alpine`, matching
+  the image the Coolify host actually runs rather than the `16-3.4` this repo
+  guessed at in 0.3.0. Major version included: the point of the service container
+  is to be evidence about the database `postgres_store` will really write to.
+  Nothing in the store is version-sensitive — no `ON CONFLICT`, `MERGE`, window
+  function, or `LATERAL`, and its types all predate 16 — so this is a
+  verification fix, not a compatibility one. docs/ARCHITECTURE.md §3 records the
+  image, and the collation choice the alpine variant forces at `initdb`.
+
 ## [0.3.0] — not yet tagged
 
 **Both halves.** This is the release that makes the repo dual-published
