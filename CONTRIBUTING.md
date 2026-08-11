@@ -12,13 +12,31 @@ pytest
 Postgres integration tests (`tests/test_postgres_store.py`) skip automatically
 if `TOOLKIT_TEST_DATABASE_URL` isn't set — they need a real Postgres, since
 the store's `indicators_current` view relies on `DISTINCT ON`, which has no
-SQLite equivalent. To run them locally:
+SQLite equivalent. **A skipped test is not a passing test**: `pytest` still
+exits 0, so check the counts, not the exit code. `pytest` should report
+**39 passed, 0 skipped**; 8 skips means you have no database.
+
+If you already run Postgres locally, any 16+ instance will do:
 
 ```
 createdb civic_toolkit_dev
 export TOOLKIT_TEST_DATABASE_URL=postgresql://localhost/civic_toolkit_dev
 pytest tests/test_postgres_store.py -v
 ```
+
+Otherwise `scripts/dev-postgres.sh` builds one matching the deployed instance —
+**Postgres 18 + PostGIS 3.6** (docs/ARCHITECTURE.md §3), installed from PGDG
+since Ubuntu 24.04 ships only `postgresql-16`:
+
+```
+sudo ./scripts/dev-postgres.sh          # idempotent; prints the DSN to export
+export TOOLKIT_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/civic_toolkit_test
+pytest -q
+```
+
+It runs on port **5433** so it won't disturb a system `postgresql-16`, and
+`initdb`s with `--locale=C` deliberately — see §3 for why the alpine image's
+default locale leaves `datcollate` claiming something musl cannot provide.
 
 ## Adding a new API client
 

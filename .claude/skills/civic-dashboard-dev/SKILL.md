@@ -42,6 +42,38 @@ Four failure modes, all of which have already occurred here:
 Verify against the source — the live API, the file on disk, the run history — not memory.
 Correct yourself in one line and move on.
 
+## 1a. What the Claude cloud environment gives you — use it before speculating
+
+Real credentials and a real database are available in the session environment.
+Several wrong claims in this project's history would have been caught by one live
+call, so **verify against the API rather than reasoning about it.**
+
+**Working, and safe to call** — public read-only data APIs, no cost, no writes:
+
+| Env var | Verified against |
+|---|---|
+| `CENSUS_API_KEY` | `AcsClient` — all 64 variables of 901economy's ACS 1-year pull, MSA cut, clean |
+| `FRED_API_KEY` | `FredClient` — `MPHNA`, `MPHLF` |
+| `BEA_API_KEY` | `BeaClient` — `CAGDP1`/`47157` fine; **no metro GDP exists, see `bea.py`** |
+
+Read them from the environment; never paste a key into a file, a commit, a PR
+body, or the transcript. When printing an exception from an API call, scrub the
+key first — `requests` puts it in the URL, so raw error text leaks it.
+
+**`DATABASE_URL` is set but not reachable.** It names a private Coolify service
+that does not resolve outside that network — DNS fails, so there is nothing to
+retry. That is the intended posture, not a misconfiguration. Consequences: you
+cannot apply `db/schema.sql`, run seeds, or inspect production from a session.
+Those run from the pipeline container on the host.
+
+**For database work, build a local Postgres instead:** `scripts/dev-postgres.sh`
+gives Postgres 18 + PostGIS 3.6 matching the deployed instance, and takes
+`pytest` from *31 passed / 8 skipped* to **39 passed / 0 skipped**. Use it before
+claiming anything about `postgres_store`.
+
+**No `ANTHROPIC_API_KEY`** is set (only `ANTHROPIC_BASE_URL`), so `ai_extract` /
+T3 extraction paths cannot be exercised live.
+
 ## 2. Read the recorded decisions; don't re-derive them
 
 | Question | Answer lives in |

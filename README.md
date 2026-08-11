@@ -115,10 +115,15 @@ fred.series_observations("MPHNA", start="2020-01-01")
 from toolkit.bea import BeaClient
 
 bea = BeaClient(api_key="...")
-bea.regional_gdp(table_name="CAGDP1", geo_fips="28700", year="2023")
-# -> [{"geo_fips": "28700", "geo_name": "Memphis, TN-MS-AR (Metropolitan Statistical Area)",
-#      "period": "2023", "value": 102900.0}]
+bea.regional_gdp(table_name="CAGDP1", geo_fips="47157", year="2023", line_code="3")
+# -> [{"geo_fips": "47157", "geo_name": "Shelby", "period": "2023", "value": 85672928.0}]
+#    thousands of dollars
 ```
+
+**County, state, and BEA region only — the Regional dataset has no metro-area
+GDP**, and a CBSA code raises rather than returning empty. Verified against the
+live API; see `bea.py`'s module docstring for the evidence and what to do
+instead.
 
 **ArcGIS Feature Service** (server-side aggregation, not raw record dumps):
 
