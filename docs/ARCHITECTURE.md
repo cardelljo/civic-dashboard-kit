@@ -127,6 +127,56 @@ leave the cluster on ephemeral container storage, where everything works until
 the first restart. Verify by restarting the container and confirming the data
 survived, before there is data worth losing.
 
+## 3.1 Bootstrapping the instance: [`db/bootstrap.sql`](../db/bootstrap.sql)
+
+One script, run once as superuser, before any dashboard applies its own
+`schema.sql`. Idempotent. It creates all four schemas, four roles, the grants,
+the `search_path` defaults, and `geo.boundaries` — for **all three dashboards at
+once**, because one database means the roles interlock and splitting them across
+files would impose a run order nothing enforces.
+
+It lives here rather than in a dashboard because it is precisely what §2 and §4
+own. A dashboard's own tables stay in its own repo.
+
+**Unqualified SQL plus a per-role `search_path` is the mechanism, not table-name
+prefixes.** `toolkit.postgres_store` writes `INSERT INTO indicators`; the
+connecting role supplies the namespace via
+`ALTER ROLE economy_app SET search_path = economy, geo, public`. That is a
+one-time catalog setting, inherited by every later connection, and it is why one
+store module serves every dashboard — hardcoding `economy.indicators` would make
+it economy-only, and parameterizing the schema into every query means threading a
+name through the whole API.
+
+The failure mode to know: a role *without* that setting resolves to `public` and
+**works while writing to the wrong place**. Mitigation is structural — nothing
+belongs in `public` but PostGIS's own `spatial_ref_sys`, so a missing
+`search_path` errors with "relation does not exist" rather than silently
+succeeding.
+
+**Creating a schema is not a migration commitment.** `education` and `justice`
+exist from the first run, but §1 still governs the store choice — education is on
+the NDJSON ledger and justice is a deliberate judgment call. Their namespaces
+exist so either can read `geo.boundaries` at build time without owning any of it,
+and so adopting Postgres later needs no second bootstrap.
+
+**`geo` gets its own role.** `geo_loader` owns the schema; the three app roles get
+`USAGE` + `SELECT` and nothing more. If `economy_app` owned `geo`, the other
+dashboards would read from a namespace one dashboard controls, and "shared" would
+hold only by convention. `ALTER DEFAULT PRIVILEGES` covers tables added later, so
+a second `geo` table does not silently become unreadable.
+
+**No passwords in the file** — this repo is public. Roles are created with `LOGIN`
+and no password, so they cannot authenticate until `\password <role>` is run in
+the same psql session. That prompts and hashes client-side, keeping the secret out
+of the file, the shell history, and the process list.
+
+Verified against a real Postgres 18 + PostGIS 3.6: two consecutive runs both exit
+0; the four schemas come out owned by their roles; 901economy's `schema.sql`
+applied as `economy_app` puts its 6 tables in `economy` with only
+`spatial_ref_sys` in `public`; an unqualified `INSERT` lands in `economy`;
+`economy_app` can read `geo.boundaries` and is refused on write with
+`permission denied for table boundaries`.
+
 ## 4. The shared `geo` schema
 
 ```sql
