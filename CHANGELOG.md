@@ -6,6 +6,24 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Added — shared infrastructure
+
+- `db/bootstrap.sql` — the one-time, idempotent bootstrap for the shared Postgres
+  instance: all four schemas (`economy`, `education`, `justice`, `geo`), four
+  roles, grants, per-role `search_path`, and `geo.boundaries` from
+  ARCHITECTURE §4. One script for all three dashboards, because a single database
+  means the roles interlock and separate files would impose an unenforced run
+  order. Recorded as §3.1.
+  - Namespaces come from a per-role `search_path`, not table-name prefixes —
+    which is what lets `postgres_store`'s unqualified SQL serve every dashboard.
+  - `geo` is owned by a dedicated `geo_loader`; the app roles get `SELECT` only,
+    so a shared schema is not controlled by one dashboard.
+  - No passwords in the file (public repo): roles get `LOGIN` with none, and
+    cannot authenticate until `\password <role>` is run.
+  - Verified on real Postgres 18 + PostGIS 3.6 — idempotent across two runs, and
+    901economy's `schema.sql` applied as `economy_app` lands its 6 tables in
+    `economy`, with `geo` writes correctly refused.
+
 ### Fixed — Python half
 
 - **`bea.py` documented a call that cannot work.** Its module docstring and the
