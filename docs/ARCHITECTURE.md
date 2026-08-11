@@ -93,15 +93,39 @@ only been exercised against Postgres 16. Nothing in `db/schema.sql` or
 with no `ON CONFLICT`, `MERGE`, window function, or `LATERAL` anywhere. All of
 that predates 16.
 
-**One initdb-time choice the alpine variant forces: collation.** musl has minimal
-locale support, so Postgres there gives you **C collation** unless the ICU
-provider is selected at `initdb`. Collation is fixed at that moment — changing it
-later means a reindex or a dump-and-reload, the same class of irreversibility as
-the image swap above. C is fine for this data (`period` is `YYYY` / `YYYY-MM` /
-`YYYY-QN`, designed to sort as text; `indicator_id`, `geo_key` and `source_key`
-are ASCII; `indicators_current` breaks ties on a timestamp). It only shows up in
-locale-aware ordering of display names — accept it knowingly rather than discover
-it.
+**One initdb-time choice the alpine variant forces: collation.** Collation is
+fixed at `initdb` — changing it later means a reindex or a dump-and-reload, the
+same class of irreversibility as the image swap above.
+
+The failure mode is worse than "you get C collation," and this is **observed, not
+predicted** — from this repo's own CI running the same image
+([run 31507379253](https://github.com/cardelljo/civic-dashboard-kit/actions/runs/31507379253)):
+
+```
+sh: locale: not found
+The database cluster will be initialized with locale "en_US.utf8".
+WARNING:  no usable system locales were found
+```
+
+`initdb` **accepts** `en_US.utf8` and carries on. So `pg_database.datcollate`
+will report `en_US.utf8` while musl provides no such locale and text actually
+orders by byte value. The catalog does not match the behavior, which is the kind
+of discrepancy that gets diagnosed as a data bug years later.
+
+So choose explicitly at `initdb` rather than taking the default: either
+`--locale-provider=icu` with a named ICU locale, or `--locale=C` so the catalog
+tells the truth. Plain C is fine for this data — `period` is `YYYY` / `YYYY-MM` /
+`YYYY-QN` and sorts correctly as bytes, `indicator_id` / `geo_key` /
+`source_key` are ASCII, and `indicators_current` breaks ties on a timestamp. It
+surfaces only in locale-aware ordering of display names.
+
+**Also check the data directory actually persists.** Postgres 18 images put
+`PGDATA` at `/var/lib/postgresql/18/docker`, not the `/var/lib/postgresql/data`
+of earlier majors — visible in the same run (`pg_ctl -D
+/var/lib/postgresql/18/docker`). A volume mount written for the old path would
+leave the cluster on ephemeral container storage, where everything works until
+the first restart. Verify by restarting the container and confirming the data
+survived, before there is data worth losing.
 
 ## 4. The shared `geo` schema
 
