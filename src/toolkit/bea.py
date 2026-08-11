@@ -14,9 +14,23 @@ Usage:
     from toolkit.bea import BeaClient
 
     bea = BeaClient(api_key="...")
-    rows = bea.regional_gdp(table_name="CAGDP1", geo_fips="28700", year="2023")
-    # -> [{"geo_fips": "28700", "geo_name": "Memphis, TN-MS-AR (Metropolitan
-    #      Statistical Area)", "period": "2023", "value": 102900.0, ...}]
+    rows = bea.regional_gdp(table_name="CAGDP1", geo_fips="47157",
+                             year="2023", line_code="3")
+    # -> [{"geo_fips": "47157", "geo_name": "Shelby",
+    #      "period": "2023", "value": 85672928.0}]     # thousands of dollars
+
+The CAGDP tables are **county, state, and BEA-region only -- there is no
+metro-area GDP in the Regional dataset.** Verified against the live API
+(2026-08): `GetParameterValuesFiltered` for CAGDP1's GeoFips returns 3,187
+values with zero metro entries, `GeoFips=MSA` is rejected, and no `MAGDP*` table
+appears in `GetParameterValues` for TableName -- the Regional GDP tables are
+CAGDP1, CAGDP2, CAGDP8, CAGDP9, CAGDP11 plus the SAGDP/SQGDP/PRGDP families.
+
+This is worth stating loudly because passing a CBSA code here **raises** rather
+than returning empty, and an earlier version of this docstring taught exactly
+that mistake (it claimed `geo_fips='28700'` returned a Memphis MSA row; it does
+not, and neither does '32820'). For a metro figure, either aggregate the member
+counties yourself or take the county as the geography and say so in the vintage.
 """
 
 from __future__ import annotations
@@ -46,9 +60,11 @@ class BeaClient:
         `table_name`: 'CAGDP1' (nominal GDP), 'CAGDP9' (real/chained GDP), or
         'CAGDP2' (GDP by industry -- pass the relevant `line_code` for the
         private-industry-share line).
-        `geo_fips`: BEA's regional GeoFips code (MSAs use their CBSA code,
-        e.g. '28700' for Memphis MSA; a two-letter state postal code pulls
-        every county in that state).
+        `geo_fips`: BEA's regional GeoFips code — a county FIPS ('47157'), a
+        state ('47000'), a BEA region, or '00000' for the US. A two-letter state
+        postal code pulls every county in that state. **A CBSA/metro code raises**
+        (APIErrorCode 101): these tables carry no metro rows. See the module
+        docstring.
         `year`: a single year, comma-separated years, or BEA's 'LASTn' /
         'ALL' shorthand.
 

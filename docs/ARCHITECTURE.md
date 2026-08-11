@@ -82,9 +82,50 @@ PostGIS moves the *source of truth*, not the delivery mechanism.
 
 **Provision from a PostGIS-capable image even before the extension is needed.**
 `CREATE EXTENSION postgis;` is trivial on an image that supports it; swapping
-the image under a running database later is not. Use `postgis/postgis:16-*`
-rather than plain `postgres:16` — same Postgres 16 this package's
-`postgres_store` was tested against.
+the image under a running database later is not.
+
+**The image is `postgis/postgis:18-3.6-alpine`** — what the Coolify host actually
+runs, so CI in this repo matches it rather than an aspiration. This supersedes an
+earlier `postgis/postgis:16-*` recommendation written when `postgres_store` had
+only been exercised against Postgres 16. Nothing in `db/schema.sql` or
+`postgres_store` is version-sensitive: between them they use `TEXT`,
+`TIMESTAMPTZ`, `BOOLEAN`, `BIGSERIAL`, `JSONB`, `NUMERIC` and one `DISTINCT ON`,
+with no `ON CONFLICT`, `MERGE`, window function, or `LATERAL` anywhere. All of
+that predates 16.
+
+**One initdb-time choice the alpine variant forces: collation.** Collation is
+fixed at `initdb` — changing it later means a reindex or a dump-and-reload, the
+same class of irreversibility as the image swap above.
+
+The failure mode is worse than "you get C collation," and this is **observed, not
+predicted** — from this repo's own CI running the same image
+([run 31507379253](https://github.com/cardelljo/civic-dashboard-kit/actions/runs/31507379253)):
+
+```
+sh: locale: not found
+The database cluster will be initialized with locale "en_US.utf8".
+WARNING:  no usable system locales were found
+```
+
+`initdb` **accepts** `en_US.utf8` and carries on. So `pg_database.datcollate`
+will report `en_US.utf8` while musl provides no such locale and text actually
+orders by byte value. The catalog does not match the behavior, which is the kind
+of discrepancy that gets diagnosed as a data bug years later.
+
+So choose explicitly at `initdb` rather than taking the default: either
+`--locale-provider=icu` with a named ICU locale, or `--locale=C` so the catalog
+tells the truth. Plain C is fine for this data — `period` is `YYYY` / `YYYY-MM` /
+`YYYY-QN` and sorts correctly as bytes, `indicator_id` / `geo_key` /
+`source_key` are ASCII, and `indicators_current` breaks ties on a timestamp. It
+surfaces only in locale-aware ordering of display names.
+
+**Also check the data directory actually persists.** Postgres 18 images put
+`PGDATA` at `/var/lib/postgresql/18/docker`, not the `/var/lib/postgresql/data`
+of earlier majors — visible in the same run (`pg_ctl -D
+/var/lib/postgresql/18/docker`). A volume mount written for the old path would
+leave the cluster on ephemeral container storage, where everything works until
+the first restart. Verify by restarting the container and confirming the data
+survived, before there is data worth losing.
 
 ## 4. The shared `geo` schema
 
@@ -427,11 +468,14 @@ date. Measured directly from the workflows and configs at 901economy `bd3f1bb1`,
    live site, not an oversight — do not flip it without a decision.** The
    consequence to plan around is narrow: justice cannot self-verify a frontend
    change, so a frontend change should be proven elsewhere first.
-3. **901economy's CI Postgres is `postgres:16`, not a PostGIS image.** Harmless
-   today, but §3 provisions the shared instance from `postgis/postgis:16-*`, so
-   the first test touching PostGIS would fail in CI while passing against the
-   real database — the confusing direction. This package's own CI moved to
-   `postgis/postgis:16-3.4`; economy's is its own call.
+3. **901economy's CI Postgres is `postgres:16`; the real instance is
+   `postgis/postgis:18-3.6-alpine`.** Two divergences in one, and the major
+   version is the bigger of them: economy's suite has never run against the
+   Postgres its pipeline will actually write to. Harmless so far — nothing in its
+   schema is version-sensitive (§3) — but the first PostGIS-touching test would
+   fail in CI while passing against the real database, which is the confusing
+   direction. This package's own CI matches the host image; economy's is its own
+   call, and its own repo.
 
 ### The floor itself
 

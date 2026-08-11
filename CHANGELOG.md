@@ -6,6 +6,41 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Fixed — Python half
+
+- **`bea.py` documented a call that cannot work.** Its module docstring and the
+  README quickstart both showed `geo_fips="28700"` returning a "Memphis,
+  TN-MS-AR (Metropolitan Statistical Area)" row. Checked against the live API:
+  the CAGDP tables are county/state/BEA-region only. `GetParameterValuesFiltered`
+  for CAGDP1's GeoFips returns 3,187 values with **zero** metro entries,
+  `GeoFips=MSA` is rejected, and no `MAGDP*` table exists in the Regional
+  dataset. A CBSA code **raises** (APIErrorCode 101) rather than returning empty,
+  so this mattered: it taught a call that fails. Both now use a county FIPS with
+  a verified figure, and `regional_gdp`'s docstring says what `geo_fips` accepts.
+
+### Added — developer tooling
+
+- `scripts/dev-postgres.sh` — a local Postgres 18 + PostGIS 3.6 cluster matching
+  the deployed instance, installed from PGDG (Ubuntu 24.04 ships only 16). Takes
+  `pytest` from *31 passed / 8 skipped* to **39 passed / 0 skipped**, so
+  `postgres_store` changes are verifiable without CI. Port 5433 to leave a system
+  `postgresql-16` alone; `initdb --locale=C` for the reason in ARCHITECTURE §3.
+- The `civic-dashboard-dev` skill now records which credentials a Claude cloud
+  session actually has, which are verified working, and that `DATABASE_URL`
+  names an unreachable private host — so sessions stop speculating where one
+  live call would settle it.
+
+### Changed — CI
+
+- The Python job's Postgres service is `postgis/postgis:18-3.6-alpine`, matching
+  the image the Coolify host actually runs rather than the `16-3.4` this repo
+  guessed at in 0.3.0. Major version included: the point of the service container
+  is to be evidence about the database `postgres_store` will really write to.
+  Nothing in the store is version-sensitive — no `ON CONFLICT`, `MERGE`, window
+  function, or `LATERAL`, and its types all predate 16 — so this is a
+  verification fix, not a compatibility one. docs/ARCHITECTURE.md §3 records the
+  image, and the collation choice the alpine variant forces at `initdb`.
+
 ## [0.3.0] — not yet tagged
 
 **Both halves.** This is the release that makes the repo dual-published
