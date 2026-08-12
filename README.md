@@ -232,6 +232,13 @@ run. Start with `observations.py`; move to `postgres_store.py` when the
 NDJSON ledger's commit sizes or review burden actually become a problem, not
 before.
 
+> **For the 901 dashboards specifically, that choice is settled: all three use
+> Postgres.** The scale reasoning above still holds generally, which is why both
+> modules stay in the package — but it weighed only volume, and the deciding
+> factor turned out to be that a git-committed ledger makes the data layer depend
+> on a hosting account. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §1.
+> `observations.py` remains supported for genuinely file-shaped problems.
+
 Once you are on Postgres, how the instance is laid out across dashboards — one
 instance, one schema each, plus a shared PostGIS `geo` schema holding the
 boundary polygons they all plot — is recorded in

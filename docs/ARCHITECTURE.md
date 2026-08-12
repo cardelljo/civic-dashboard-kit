@@ -28,16 +28,110 @@ Fork-per-dashboard and the toolkit-extraction history are recorded separately in
 
 ---
 
-## 1. Choosing a store is per dashboard, and that is deliberate
+## 1. Every dashboard's store is Postgres
 
-901education writes a git-committed NDJSON ledger (`observations.py`);
-901economy writes Postgres (`postgres_store.py`). That is **not** drift — the
-two share one append-only design, and the README's
-[Choosing a store](../README.md#choosing-a-store-observationspy-vs-postgres_storepy)
-section is the decision record. A single-district annual dashboard and a
-~30-source multi-cadence one legitimately want different stores.
+**Superseded, 2026-08:** this section previously said the store choice was per
+dashboard and that the NDJSON-vs-Postgres split was "not drift" but a legitimate
+scale judgment. That reasoning was sound on scale and incomplete on the thing
+that actually mattered.
 
-What follows applies to whichever dashboards land on Postgres.
+**All three dashboards store their data in the shared Postgres instance.** The
+git-committed NDJSON ledger is a transitional state for 901education, not a
+destination.
+
+### Why the earlier reasoning was incomplete
+
+It weighed only volume — a single-district annual dashboard against a ~30-source
+multi-cadence one — and on volume it was right. What it never weighed is
+**GitHub as operational infrastructure**. A git-committed ledger makes the data
+layer depend on a hosting account, its availability, its rate limits, its
+auth, and a commit step in every write path. That is a maintenance burden and a
+single point of failure the series does not want, and it does not get better with
+more dashboards.
+
+The original reason it looked fine: 901justice began as an experiment in whether a
+dashboard could be assembled at all, so static files in git were the cheapest
+possible substrate. The series has outgrown the assumption rather than
+disproved it.
+
+`toolkit.observations` stays in the package — it is a working NDJSON store and
+useful to anyone with a genuinely file-shaped problem. It is simply no longer
+where these three dashboards are heading.
+
+### What this does NOT change
+
+**The delivery mechanism is a separate question, still open.** §3 already draws
+this line: Postgres moves the *source of truth*, not how a page gets its bytes.
+Whether each site remains a static export or becomes dynamic is being decided on
+its own evidence — see §1.1. Do not read "the store is Postgres" as "the frontend
+queries Postgres."
+
+Also unchanged: the append-only discipline, the `_meta` provenance contract, and
+the human-review gate. Those are store-independent by design.
+
+### Migration is real work, and not yet planned
+
+Two dashboards have to get there, and they are not the same job:
+
+| | Today | What the move requires |
+|---|---|---|
+| 901economy | Postgres | done — it is the reference implementation |
+| 901education | NDJSON ledger, ~4 pipelines writing it | a `schema.sql`, per-source `fetch_*.py` rewrites onto `postgres_store`, **and a decision on the existing ledger's history** |
+| 901justice | static JSON, no store module | net-new: schema, store adoption, and its daily cron re-pointed |
+
+**The open question on education is history, not code.** Its ledger holds real
+observations. Backfilling them into Postgres preserves the series; starting fresh
+from cutover loses it. That is a data-integrity call, and given the append-only
+promise this project makes to its readers, losing history silently would break it
+— so it needs an explicit answer either way, not a default.
+
+Tasks for both are not written yet. A planning prompt for that work is in
+[`docs/prompts/store-migration-planning.md`](prompts/store-migration-planning.md);
+its output belongs in each dashboard's own `PLAN.md`, not here.
+
+## 1.1 Open: static export or dynamic app?
+
+**Not decided. Recorded so it stops being an undercurrent.**
+
+§1 moved the source of truth to Postgres. It did not answer how a page gets its
+bytes, and the two are genuinely separable — §3 says so explicitly.
+
+The question surfaced from real pressure, not preference: 901justice began as an
+experiment in whether a dashboard could be assembled at all, so static files in
+git were the cheapest substrate. The series now wants functionality that a
+pre-baked artifact serves poorly.
+
+**What a dynamic app buys:**
+
+- No build-and-commit step between a pipeline run and a visible number — the same
+  GitHub-as-infrastructure dependency §1 removed from the write path, removed from
+  the publish path too.
+- Queries that cannot be pre-baked. Nine counties × ~24 years × N indicators ×
+  filters is combinatorial; pre-generating every view stops scaling.
+- The T3 admin review queue **must** be dynamic — it writes `approvals`. A
+  dynamic surface is coming regardless.
+- One container per dashboard rather than two.
+
+**What the static export currently buys, which is easy to undervalue:**
+
+- **A published figure is a reviewable artifact.** Committed JSON has a diff and a
+  history: a bad pipeline run shows up as a change someone can see before it ships.
+  A live query shows whatever the database says right now. The `pending_review`
+  gate still holds — `indicators_current` filters on `status = 'success'` — but
+  gate and diff catch different failures.
+- **Availability.** nginx serving files stays up when the database does not. A
+  civic dashboard going dark because of a database issue is a real regression.
+- Cost and simplicity: no query per page load, no connection pool, no caching tier.
+
+**A middle option that may get most of the benefit:** keep the static export but
+**generate it in the container onto a volume nginx serves, instead of committing it
+to git**. That removes GitHub from the publish path — the actual complaint — while
+keeping the fixed-artifact and availability properties. Then go dynamic only for
+what genuinely cannot be pre-baked: the admin queue, and arbitrary user filtering.
+
+Deciding this needs a list of the specific features being asked for, so the
+"cannot be pre-baked" set is real rather than assumed. Until then, **assume static
+export** — it is what all three repos ship today (`output: 'export'`).
 
 ## 2. One Postgres instance, one schema per dashboard, plus a shared `geo`
 
