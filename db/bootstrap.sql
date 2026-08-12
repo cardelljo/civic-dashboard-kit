@@ -36,11 +36,12 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 -- ---------------------------------------------------------------------------
 -- 2. Schemas -- one per dashboard, plus the shared geo (§2)
 -- ---------------------------------------------------------------------------
--- Creating a namespace is NOT a migration commitment. §1 keeps the store choice
--- per dashboard: 901education is on the NDJSON ledger and 901justice is a
--- deliberate judgment call. Their schemas exist here so that if either ever
--- adopts Postgres it slots in without a second bootstrap -- and, more usefully
--- today, so both can read geo.boundaries at build time without owning any of it.
+-- §1 now puts EVERY dashboard on Postgres -- the git-committed NDJSON ledger is
+-- transitional, not a destination, because it makes the data layer depend on a
+-- hosting account. So these are not speculative namespaces: education and
+-- justice are both migrating. Their tables do not exist yet (each needs its own
+-- schema.sql and pipeline rewrites -- see docs/prompts/store-migration-planning.md),
+-- and until then both can already read geo.boundaries without owning any of it.
 CREATE SCHEMA IF NOT EXISTS economy;
 CREATE SCHEMA IF NOT EXISTS education;
 CREATE SCHEMA IF NOT EXISTS justice;

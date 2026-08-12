@@ -28,16 +28,129 @@ Fork-per-dashboard and the toolkit-extraction history are recorded separately in
 
 ---
 
-## 1. Choosing a store is per dashboard, and that is deliberate
+## 1. Every dashboard's store is Postgres
 
-901education writes a git-committed NDJSON ledger (`observations.py`);
-901economy writes Postgres (`postgres_store.py`). That is **not** drift — the
-two share one append-only design, and the README's
-[Choosing a store](../README.md#choosing-a-store-observationspy-vs-postgres_storepy)
-section is the decision record. A single-district annual dashboard and a
-~30-source multi-cadence one legitimately want different stores.
+**Superseded, 2026-08:** this section previously said the store choice was per
+dashboard and that the NDJSON-vs-Postgres split was "not drift" but a legitimate
+scale judgment. That reasoning was sound on scale and incomplete on the thing
+that actually mattered.
 
-What follows applies to whichever dashboards land on Postgres.
+**All three dashboards store their data in the shared Postgres instance.** The
+git-committed NDJSON ledger is a transitional state for 901education, not a
+destination.
+
+### Why the earlier reasoning was incomplete
+
+It weighed only volume — a single-district annual dashboard against a ~30-source
+multi-cadence one — and on volume it was right. What it never weighed is
+**GitHub as operational infrastructure**. A git-committed ledger makes the data
+layer depend on a hosting account, its availability, its rate limits, its
+auth, and a commit step in every write path. That is a maintenance burden and a
+single point of failure the series does not want, and it does not get better with
+more dashboards.
+
+The original reason it looked fine: 901justice began as an experiment in whether a
+dashboard could be assembled at all, so static files in git were the cheapest
+possible substrate. The series has outgrown the assumption rather than
+disproved it.
+
+`toolkit.observations` stays in the package — it is a working NDJSON store and
+useful to anyone with a genuinely file-shaped problem. It is simply no longer
+where these three dashboards are heading.
+
+### What this does NOT change
+
+**The delivery mechanism is a separate decision, made separately.** §3 already
+draws this line: Postgres moves the *source of truth*, not how a page gets its
+bytes. §1.1 settles it — public pages stay a static export, generated into a
+volume rather than committed to git. Do not read "the store is Postgres" as "the
+frontend queries Postgres." It does not."
+
+Also unchanged: the append-only discipline, the `_meta` provenance contract, and
+the human-review gate. Those are store-independent by design.
+
+### Migration is real work, and not yet planned
+
+Two dashboards have to get there, and they are not the same job:
+
+| | Today | What the move requires |
+|---|---|---|
+| 901economy | Postgres | done — it is the reference implementation |
+| 901education | NDJSON ledger, ~4 pipelines writing it | a `schema.sql`, per-source `fetch_*.py` rewrites onto `postgres_store`, **and a decision on the existing ledger's history** |
+| 901justice | static JSON, no store module | net-new: schema, store adoption, and its daily cron re-pointed |
+
+**The open question on education is history, not code.** Its ledger holds real
+observations. Backfilling them into Postgres preserves the series; starting fresh
+from cutover loses it. That is a data-integrity call, and given the append-only
+promise this project makes to its readers, losing history silently would break it
+— so it needs an explicit answer either way, not a default.
+
+Tasks for both are not written yet. A planning prompt for that work is in
+[`docs/prompts/store-migration-planning.md`](prompts/store-migration-planning.md);
+its output belongs in each dashboard's own `PLAN.md`, not here.
+
+## 1.1 Delivery: volume-generated static pages, dynamic only where it earns it
+
+**Decided, 2026-08.** §1 moved the source of truth to Postgres. This answers how a
+page gets its bytes — a separate question, as §3 always said.
+
+### The decision
+
+| Surface | How it is served |
+|---|---|
+| Public dashboard pages | **Static export, generated into a volume nginx serves — not committed to git** |
+| T3 admin review queue | **Dynamic.** It writes `approvals`; it cannot be a static artifact |
+| A genuinely query-driven feature | Dynamic, once one exists and is named |
+
+The build step stops being "write JSON, commit it, redeploy" and becomes "write
+JSON to the volume the site is already serving." A pipeline run becomes visible
+without a commit, a deploy, or GitHub in the path at all.
+
+### Why this rather than going fully dynamic
+
+The complaint that drove this was **GitHub as operational infrastructure** — the
+same thing §1 removed from the write path. The static export never caused that;
+the *commit step* did. Removing the commit addresses the actual problem, and keeps
+two properties that a live-querying frontend gives up:
+
+- **Availability.** nginx serving files stays up when Postgres does not. A civic
+  dashboard going dark because of a database problem is a real regression, and
+  these sites are the public record for people who have no other copy.
+- **A published page is a fixed artifact.** What a visitor sees is a file that was
+  written deliberately, not the result of whatever state the database is in at that
+  millisecond — including mid-pipeline-run.
+
+**Decided without a feature list, deliberately.** There is no current set of
+features that requires a dynamic public frontend. That absence is the argument:
+you do not buy the cost of dynamic rendering — a query per page load, a connection
+pool, a caching tier, and a new outage surface — before something needs it. The
+admin queue is the one surface that genuinely needs it today, and it gets it.
+
+**Revisit if** a real feature list arrives that is mostly user-driven querying
+across many geographies, periods, or demographic groups. Pre-generating those
+combinations stops scaling, and at that point dynamic public pages become the
+cheaper answer rather than the more expensive one. Name the features; don't
+re-argue the principle.
+
+### The honest cost: the git diff was a review surface, and it is going away
+
+This is the part not to gloss. Committing built JSON meant every published figure
+had a diff and a history — a bad pipeline run showed up as a reviewable change
+before anyone saw it. Writing to a volume keeps the *artifact* property and loses
+the *audit* property. The `pending_review` gate still holds (`indicators_current`
+filters on `status = 'success'`), but a gate and a diff catch different failures,
+and this project has already shipped fabricated placeholder values once.
+
+So the replacement has to be deliberate, not assumed. What already exists:
+
+- `source_runs` records every run, its status, and its row count — server-side and
+  append-only.
+- `validate_snapshots.py` gates the contract *before* publish.
+
+What does not exist yet and should: **retention of previous exports on the volume**
+so a published page can be compared against what it replaced, and a way to see
+that a figure changed without reading two JSON files by hand. Until that exists,
+the loss is real and worth remembering rather than filed as solved.
 
 ## 2. One Postgres instance, one schema per dashboard, plus a shared `geo`
 
