@@ -360,7 +360,50 @@ into `geo.boundaries` uses this package.
 
 Open, not decided here: whether the MPD ward/station-area layers belong in the
 shared schema or stay justice-specific. They are currently treated as
-justice-specific.
+justice-specific, so only the other six layers below load into `geo.boundaries`.
+
+### 6.1 The loader: [`toolkit/boundaries.py`](../src/toolkit/boundaries.py)
+
+901justice's files are already GeoJSON, not raw shapefiles, so the loader does
+no shapefile parsing — that stays `toolkit.geo`'s job. `load_geojson()` takes a
+FeatureCollection already on disk and upserts it into `geo.boundaries`, keyed on
+`(layer, geo_key, vintage)` exactly like the table's `UNIQUE` constraint: a
+rerun with the same vintage corrects that vintage's rows in place, and a new
+vintage adds rows without touching the old ones. A bare `Polygon` feature (the
+MPD layers, left unloaded here) is wrapped with `ST_Multi` rather than rejected
+by the column's `MultiPolygon` type.
+
+[`scripts/load_boundaries.py`](../scripts/load_boundaries.py) is the CLI over
+it — dashboard-agnostic, since `geo.boundaries` is shared: it takes the
+`properties` key names to read rather than assuming any one convention. The six
+shareable layers all load with one invocation shape:
+
+```
+export DATABASE_URL=postgresql://geo_loader:<password>@<host>/civic
+python3 scripts/load_boundaries.py \
+    --file data/boundaries/cityCouncil.json \
+    --layer city-council --geo-key-property id --name-property name \
+    --vintage "Shelby County GIS 2023-08-21"
+```
+
+(`congressional`/`countyCommission`/`stateHouse`/`stateSenate` follow the same
+`id`/`name` shape; `memphisZips.json` uses `--geo-key-property zip`.) This runs
+from inside the Coolify network, authenticated as `geo_loader` — the role
+`geo.boundaries` is owned by, not any dashboard's app role — because
+`DATABASE_URL`'s host is internal-only (§1a).
+
+Verified against a real Postgres 18 + PostGIS 3.6, including against
+901justice's actual files, not synthetic fixtures: `city-council` (8 features)
+and `zip` (31 features) both load; a rerun of `city-council` with the same
+vintage stays at 8 rows rather than becoming 16; every loaded geometry reports
+`ST_MultiPolygon`.
+
+**Found in the process, not fixed here:** `ST_IsValid` flags 2 of the 31 zip
+polygons (self-intersecting shells) — a data-quality issue in the source
+shapefile conversion, not something the loader introduces or should silently
+repair. Whoever runs the real load should expect `ST_IsValid` to flag these two
+and decide whether to re-derive them from source before loading, not treat a
+loader that reports success as proof the geometries are clean.
 
 ## 7. Shared frontend code ships from this repo, as a second package
 
