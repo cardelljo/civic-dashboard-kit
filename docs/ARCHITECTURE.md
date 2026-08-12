@@ -60,11 +60,11 @@ where these three dashboards are heading.
 
 ### What this does NOT change
 
-**The delivery mechanism is a separate question, still open.** §3 already draws
-this line: Postgres moves the *source of truth*, not how a page gets its bytes.
-Whether each site remains a static export or becomes dynamic is being decided on
-its own evidence — see §1.1. Do not read "the store is Postgres" as "the frontend
-queries Postgres."
+**The delivery mechanism is a separate decision, made separately.** §3 already
+draws this line: Postgres moves the *source of truth*, not how a page gets its
+bytes. §1.1 settles it — public pages stay a static export, generated into a
+volume rather than committed to git. Do not read "the store is Postgres" as "the
+frontend queries Postgres." It does not."
 
 Also unchanged: the append-only discipline, the `_meta` provenance contract, and
 the human-review gate. Those are store-independent by design.
@@ -89,49 +89,68 @@ Tasks for both are not written yet. A planning prompt for that work is in
 [`docs/prompts/store-migration-planning.md`](prompts/store-migration-planning.md);
 its output belongs in each dashboard's own `PLAN.md`, not here.
 
-## 1.1 Open: static export or dynamic app?
+## 1.1 Delivery: volume-generated static pages, dynamic only where it earns it
 
-**Not decided. Recorded so it stops being an undercurrent.**
+**Decided, 2026-08.** §1 moved the source of truth to Postgres. This answers how a
+page gets its bytes — a separate question, as §3 always said.
 
-§1 moved the source of truth to Postgres. It did not answer how a page gets its
-bytes, and the two are genuinely separable — §3 says so explicitly.
+### The decision
 
-The question surfaced from real pressure, not preference: 901justice began as an
-experiment in whether a dashboard could be assembled at all, so static files in
-git were the cheapest substrate. The series now wants functionality that a
-pre-baked artifact serves poorly.
+| Surface | How it is served |
+|---|---|
+| Public dashboard pages | **Static export, generated into a volume nginx serves — not committed to git** |
+| T3 admin review queue | **Dynamic.** It writes `approvals`; it cannot be a static artifact |
+| A genuinely query-driven feature | Dynamic, once one exists and is named |
 
-**What a dynamic app buys:**
+The build step stops being "write JSON, commit it, redeploy" and becomes "write
+JSON to the volume the site is already serving." A pipeline run becomes visible
+without a commit, a deploy, or GitHub in the path at all.
 
-- No build-and-commit step between a pipeline run and a visible number — the same
-  GitHub-as-infrastructure dependency §1 removed from the write path, removed from
-  the publish path too.
-- Queries that cannot be pre-baked. Nine counties × ~24 years × N indicators ×
-  filters is combinatorial; pre-generating every view stops scaling.
-- The T3 admin review queue **must** be dynamic — it writes `approvals`. A
-  dynamic surface is coming regardless.
-- One container per dashboard rather than two.
+### Why this rather than going fully dynamic
 
-**What the static export currently buys, which is easy to undervalue:**
+The complaint that drove this was **GitHub as operational infrastructure** — the
+same thing §1 removed from the write path. The static export never caused that;
+the *commit step* did. Removing the commit addresses the actual problem, and keeps
+two properties that a live-querying frontend gives up:
 
-- **A published figure is a reviewable artifact.** Committed JSON has a diff and a
-  history: a bad pipeline run shows up as a change someone can see before it ships.
-  A live query shows whatever the database says right now. The `pending_review`
-  gate still holds — `indicators_current` filters on `status = 'success'` — but
-  gate and diff catch different failures.
-- **Availability.** nginx serving files stays up when the database does not. A
-  civic dashboard going dark because of a database issue is a real regression.
-- Cost and simplicity: no query per page load, no connection pool, no caching tier.
+- **Availability.** nginx serving files stays up when Postgres does not. A civic
+  dashboard going dark because of a database problem is a real regression, and
+  these sites are the public record for people who have no other copy.
+- **A published page is a fixed artifact.** What a visitor sees is a file that was
+  written deliberately, not the result of whatever state the database is in at that
+  millisecond — including mid-pipeline-run.
 
-**A middle option that may get most of the benefit:** keep the static export but
-**generate it in the container onto a volume nginx serves, instead of committing it
-to git**. That removes GitHub from the publish path — the actual complaint — while
-keeping the fixed-artifact and availability properties. Then go dynamic only for
-what genuinely cannot be pre-baked: the admin queue, and arbitrary user filtering.
+**Decided without a feature list, deliberately.** There is no current set of
+features that requires a dynamic public frontend. That absence is the argument:
+you do not buy the cost of dynamic rendering — a query per page load, a connection
+pool, a caching tier, and a new outage surface — before something needs it. The
+admin queue is the one surface that genuinely needs it today, and it gets it.
 
-Deciding this needs a list of the specific features being asked for, so the
-"cannot be pre-baked" set is real rather than assumed. Until then, **assume static
-export** — it is what all three repos ship today (`output: 'export'`).
+**Revisit if** a real feature list arrives that is mostly user-driven querying
+across many geographies, periods, or demographic groups. Pre-generating those
+combinations stops scaling, and at that point dynamic public pages become the
+cheaper answer rather than the more expensive one. Name the features; don't
+re-argue the principle.
+
+### The honest cost: the git diff was a review surface, and it is going away
+
+This is the part not to gloss. Committing built JSON meant every published figure
+had a diff and a history — a bad pipeline run showed up as a reviewable change
+before anyone saw it. Writing to a volume keeps the *artifact* property and loses
+the *audit* property. The `pending_review` gate still holds (`indicators_current`
+filters on `status = 'success'`), but a gate and a diff catch different failures,
+and this project has already shipped fabricated placeholder values once.
+
+So the replacement has to be deliberate, not assumed. What already exists:
+
+- `source_runs` records every run, its status, and its row count — server-side and
+  append-only.
+- `validate_snapshots.py` gates the contract *before* publish.
+
+What does not exist yet and should: **retention of previous exports on the volume**
+so a published page can be compared against what it replaced, and a way to see
+that a figure changed without reading two JSON files by hand. Until that exists,
+the loss is real and worth remembering rather than filed as solved.
 
 ## 2. One Postgres instance, one schema per dashboard, plus a shared `geo`
 

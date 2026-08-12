@@ -65,9 +65,13 @@ not record per-dashboard tasks in the shared file.
 > - Do the repo with a real verification gate before the one without: education
 >   runs pytest on PRs, justice builds with type *and* lint errors ignored.
 >
-> **Flag, don't decide:** if the delivery mechanism (static export vs. dynamic
-> app) affects your task list, say where and stop — that is §1.1's open question,
-> being decided separately. Assume static export unless told otherwise.
+> **Delivery is already decided — §1.1.** Public pages stay a static export, but
+> generated into a volume nginx serves rather than committed to git. So a
+> migration task must **not** add a commit step to any publish path, and any
+> existing "diff and commit the built JSON" step it inherits should be flagged as
+> superseded rather than reproduced. The T3 admin queue is the one dynamic
+> surface. If a task seems to need dynamic public rendering, say so and stop
+> rather than deciding it.
 
 ---
 
