@@ -218,6 +218,17 @@ def feature_collection(features: list[dict], source: str, source_date: str,
     }
 
 
+def filter_by_name(features: list[dict], names: set[str], name_property: str = "NAME") -> list[dict]:
+    """Keep only the features whose `name_property` is in `names`.
+
+    For a source with no finer-grained cut than "the whole state" -- Census
+    TIGER Places has no county-level filter, since a place can straddle a
+    county line -- this is the only way to narrow a statewide pull down to
+    the handful of features a dashboard actually wants.
+    """
+    return [f for f in features if f["properties"].get(name_property) in names]
+
+
 def convert_layer(zip_path: Path, prefix: str, transform, tolerance: float, make_properties) -> list[dict]:
     shapes = parse_shp(read_zip_member(zip_path, f"{prefix}.shp"), transform, tolerance)
     rows = parse_dbf(read_zip_member(zip_path, f"{prefix}.dbf"))

@@ -345,7 +345,8 @@ city-vs-MSA framing, justice already carries council and commission districts
 that sit inside them.
 
 Source: Census TIGER **Places** for TN (Memphis is GEOID 4748000), filtered to
-Shelby County — one pull yields all seven.
+Shelby County — one pull yields all seven. Loaded as the `municipality` layer;
+see §6.2 for the converter and verification.
 
 ## 6. Where boundary data lives today
 
@@ -405,7 +406,47 @@ repair. Whoever runs the real load should expect `ST_IsValid` to flag these two
 and decide whether to re-derive them from source before loading, not treat a
 loader that reports success as proof the geometries are clean.
 
-## 7. Shared frontend code ships from this repo, as a second package
+### 6.2 The `municipality` layer, from Census TIGER
+
+§5 named the source (Census TIGER Places, one statewide pull) and the target
+(all seven Shelby County municipalities). This fills in the pull itself:
+[`scripts/fetch_municipalities.py`](../scripts/fetch_municipalities.py) converts
+the statewide shapefile and [`toolkit.geo.filter_by_name`](../src/toolkit/geo.py)
+narrows it to the seven, then the existing `load_boundaries.py` loads the
+result unchanged — TIGER needed a new *converter*, not a new *loader*.
+
+```
+curl -O https://www2.census.gov/geo/tiger/TIGER2023/PLACE/tl_2023_47_place.zip
+python3 scripts/fetch_municipalities.py \
+    --zip tl_2023_47_place.zip --source-date 2023-11-09 \
+    --out data/boundaries/municipalities.json
+
+python3 scripts/load_boundaries.py \
+    --file data/boundaries/municipalities.json \
+    --layer municipality --geo-key-property GEOID --name-property NAME \
+    --vintage "Census TIGER/Line 2023" \
+    --source-url https://www2.census.gov/geo/tiger/TIGER2023/PLACE/tl_2023_47_place.zip
+```
+
+TIGER Places has no county-level cut — a place's polygon can straddle a county
+line, so the source can't be asked for "just Shelby County." The converter
+pulls the whole state (504 places for TN) and filters by name after
+conversion; it refuses to write a partial result if any of the seven is
+missing, rather than silently loading six.
+
+Verified against the real 2023 file, not a fixture: all seven names resolve to
+the exact GEOIDs §5 already recorded (Memphis is `4748000`); a rerun of
+`load_boundaries.py` stays at 7 rows rather than 14; every loaded geometry
+reports `ST_MultiPolygon`.
+
+**Found in the process, not fixed here:** `ST_IsValid` flags Memphis and
+Collierville — the two multi-part places (2 and 5 parts respectively, real
+non-contiguous annexations) — as "nested shells," at simplification tolerance
+0 as well as the loader's default, so this is a property of the TIGER source
+geometry, not something this converter's simplification introduces. Same
+posture as §6.1's zip-code finding: recorded here, not silently repaired.
+
+
 
 **The data-status UI is extracted here, and this repo becomes dual-published:**
 a Python distribution installed with pip and a TypeScript package installed with
