@@ -58,13 +58,49 @@ disproved it.
 useful to anyone with a genuinely file-shaped problem. It is simply no longer
 where these three dashboards are heading.
 
+### What selects Postgres specifically — recorded 2026-08, because the argument above does not
+
+**The reasoning as written rules out git. It does not, on its own, select
+Postgres.** Server-side SQLite removes GitHub from the write path just as
+completely, at a fraction of the operational cost, and at these row counts it
+would not break a sweat — the whole series is tens of thousands of rows, which
+is not a volume argument for anything. Neither is the superseded volume
+reasoning above; it was incomplete in the direction §1 says, and it was also
+never large enough to matter.
+
+Postgres is still right, for four reasons that are specific to it. Recording
+them because a stated reason gets reused: if the reason on file is "volume,"
+someone will correctly observe in a year that an annual single-district
+dashboard has none, and will reach for SQLite in a case where one of these four
+actually binds.
+
+- **PostGIS** (§3). Point-in-polygon, district↔tract overlay, the zip↔tract
+  crosswalk. SpatiaLite exists; it is a meaningfully worse version of this, and
+  spatial work is not incidental here — it is how located records become
+  district-level accountability.
+- **A shared `geo` across separate repos** (§2, §4). One spatial source of truth
+  read by three codebases needs a server. A file-based store gives each repo its
+  own copy, which is the exact duplication that justified extracting this
+  package.
+- **Two concurrent writers.** The pipeline appends observations while the review
+  queue writes `approvals`. This arrived with the T3 gate and is new since the
+  original store decision.
+- **Transactional approvals.** `pending_review → success` has to be atomic and
+  auditable, and it is the gate standing between an AI extraction and a
+  published figure.
+
+The first two are why 901education may want the instance even if it never moves
+its own indicator storage (§2, "adoption is opt-in"). The last two are why
+whichever dashboard adopts a server-side review queue is adopting Postgres with
+it.
+
 ### What this does NOT change
 
 **The delivery mechanism is a separate decision, made separately.** §3 already
 draws this line: Postgres moves the *source of truth*, not how a page gets its
 bytes. §1.1 settles it — public pages stay a static export, generated into a
 volume rather than committed to git. Do not read "the store is Postgres" as "the
-frontend queries Postgres." It does not."
+frontend queries Postgres." It does not.
 
 Also unchanged: the append-only discipline, the `_meta` provenance contract, and
 the human-review gate. Those are store-independent by design.
@@ -105,6 +141,54 @@ page gets its bytes — a separate question, as §3 always said.
 The build step stops being "write JSON, commit it, redeploy" and becomes "write
 JSON to the volume the site is already serving." A pipeline run becomes visible
 without a commit, a deploy, or GitHub in the path at all.
+
+### The mechanism, spelled out — corrected 2026-08
+
+**The paragraph above, on its own, does not work, and an external review of this
+architecture read it as a decision to fetch JSON in the browser.** It is not.
+Recording the correction rather than editing the sentence quietly, because the
+gap between "write JSON to a volume" and "a page shows a new number" is exactly
+where a wrong implementation would have landed.
+
+Every dashboard imports its data at build time — `import peopleData from
+'@/data/people.json'` under `output: 'export'`. The numbers are baked into HTML
+when `next build` runs. **Writing `data/*.json` to a volume therefore changes
+nothing a visitor sees.** Something has to re-render. There are only three ways
+to close that, and two are rejected:
+
+| | Verdict |
+|---|---|
+| Browser fetches `/data/*.json` at runtime | **Rejected.** Turns a document into an SPA: loading flash, layout shift on cellular, and empty HTML for the crawlers and link-preview bots that journalists and advocates depend on. It also puts a torn or truncated read in front of a reader. |
+| Coolify deploy webhook rebuilds the image | **Rejected — it does not actually work here.** The image builds from the git context. With data no longer in git, `next build` inside that image has nothing to bake. This route only works if the data goes back into git, which is the thing §1.1 set out to stop. |
+| **Build on the server, publish by swapping a release directory** | **Adopted.** |
+
+The adopted mechanism, run by the pipeline container after a successful
+extraction (or after an approval flips a `pending_review` run):
+
+```
+build_data_files.py            → data/*.json into the build workspace
+validate_snapshots.py --strict → gate; a failure stops here and publishes nothing
+next build                     → out/ (code from the image, data from the workspace)
+write   releases/<timestamp>/  → a complete, self-contained static site
+flip    current -> releases/<timestamp>/     ← nginx root is the symlink
+```
+
+Properties this has and the JSON-only write does not: pages actually change;
+build-time imports and the compile step survive; the publish is atomic, because
+a symlink flip is; a half-finished build is never reachable; and rollback is a
+flip back, which is faster and less error-prone than a git revert plus a
+rebuild.
+
+**Writes must be atomic at the file level too.** `Path(...).write_text()` on a
+file something else may be reading is a torn read waiting to happen — write to a
+temp file and `os.replace()` onto the same filesystem. This applies to the JSON
+build regardless of which delivery mechanism is in use.
+
+**One thing to check on the host before building this:** whether the two
+containers can share the volume as separate Coolify resources, or whether the
+builder has to be a job inside the pipeline container writing to a host bind
+mount. Either shape works with the design above; the difference is operational,
+and it is worth confirming rather than assuming.
 
 ### Why this rather than going fully dynamic
 
@@ -149,8 +233,74 @@ So the replacement has to be deliberate, not assumed. What already exists:
 
 What does not exist yet and should: **retention of previous exports on the volume**
 so a published page can be compared against what it replaced, and a way to see
-that a figure changed without reading two JSON files by hand. Until that exists,
-the loss is real and worth remembering rather than filed as solved.
+that a figure changed without reading two JSON files by hand.
+
+**The release-directory mechanism above is what closes this**, and that is half
+its justification. Retained `releases/<timestamp>/` directories *are* the diff:
+the previous published `data/*.json` is still on disk, so "what changed since
+last night" is a comparison between two directories rather than an appeal to
+memory. Two pieces make it a review surface rather than just storage, and
+neither is optional:
+
+- **A retention count** — keep N releases (start at 14; a fortnight covers a bad
+  run noticed late) and prune older ones, so the volume does not grow without
+  bound.
+- **A diff report the publish step emits** — indicator id, previous value, new
+  value, for every figure that moved. Written into the release directory and
+  worth alerting on through n8n when a value moves more than a set threshold.
+  Reading two JSON files by hand is not a review surface; a list of what changed
+  is.
+
+Until the diff report exists, the loss is real and worth remembering rather than
+filed as solved. **Do not cut a dashboard over to volume publishing before it
+does** — the gate and the diff catch different failures, this project has already
+shipped fabricated placeholder values once, and cutover without the replacement
+is the moment that would go unnoticed.
+
+## 1.2 The container boundary is audience, not language
+
+**Decided, 2026-08.** Each dashboard runs a public site container and the series
+runs a pipeline container. That split predates any of these decisions — it fell
+out of "Next.js builds with Node, extractors run in Python" — and the question
+was raised fairly: now that the admin side is becoming a real application, does
+the split still hold?
+
+It holds. The axis is just misnamed. The durable boundary is not Node vs.
+Python, it is **a public artifact and an internal application**, and their
+requirements are opposite in every row:
+
+| | Public dashboard | Admin / review queue |
+|---|---|---|
+| Readers | anonymous, mobile, crawlers, link-preview bots | one to three, authenticated |
+| Must survive Postgres being down | **yes** | no — it is meaningless without it |
+| Search and social preview | load-bearing | irrelevant |
+| Writes | never | its entire purpose |
+| Traffic shape | bursty, uncached-hostile | a handful of requests a day |
+
+Two consequences follow, and both are decisions:
+
+**The public site is a published document, not an application.** Whatever the
+admin grows into, it does not pull the public pages with it. The direction of
+travel is the opposite one: the public surface gets *more* static over time, not
+less. A civic dashboard going dark because of a database problem is a real
+regression — these sites are the public record for readers who have no other
+copy.
+
+**The review queue stays server-rendered inside the pipeline container.**
+Rejected: a second Next.js application for `/admin`. The queue is a table of
+pending extractions, each value beside its source quote, with approve and reject
+buttons — server-rendered forms, a few hundred lines, in the container that
+already holds the database credentials and already runs the extractors it is
+reviewing. A React admin would add a second frontend toolchain, a second auth
+surface, and a second deploy, and the shared component kit (§7) offers it
+nothing: a review queue needs a table and two buttons, not `KpiCard` and
+`TrendChart`. If it ever becomes something a person uses all day, moving it is a
+contained rewrite of a small app — not a decision this one forecloses.
+
+Also rejected, and worth naming because it is the conventional answer: merging
+public and admin into one Next.js server with `/admin` as a route. That takes
+the one surface that must never go down and couples it to the one that is
+allowed to.
 
 ## 2. One Postgres instance, one schema per dashboard, plus a shared `geo`
 
@@ -673,6 +823,69 @@ into every git clone. That is the reason — not secrecy. Its configuration belo
 in environment variables regardless of where the source lives.
 
 ---
+
+## 7.2 Extraction happened; adoption did not — and that is where drift starts
+
+**Measured 2026-08, on the working copies of all four repos.** §7 records the
+extraction as done, and it is: `civic-dashboard-kit/ui/` ships a real npm
+package — root `package.json`, `main: ui/index.ts`, peer deps, its own vitest
+suite. What §7 does not say is that **no dashboard depends on it.** Not one of
+the three `package.json` files names `civic-dashboard-kit`. All three still
+import from their own `components/data-status/`.
+
+So the copies are still copies:
+
+| | `DataStatusPanel.tsx` | `SampleBadge.tsx` |
+|---|---|---|
+| civic-dashboard-kit `ui/` | 238 | 58 |
+| 901justice | 241 | 57 |
+| 901education | 242 | 58 |
+| 901economy | 242 | 58 |
+| 901economy `reference/901justice/` | 242 | 58 | 
+
+§7 measured these as byte-identical apart from one import line, and called that
+a cleaner case for extraction than drift would be. **That is no longer true.**
+The kit's copy has moved: it imports `resolveStatus` from `./types`, where the
+dashboards still inline a local `getStatus`, and each dashboard still declares
+its own `DataStatus` union (901economy at `lib/types.ts:11`) alongside the one
+`ui/types.ts` calls canonical. The extraction was supposed to end that. It ended
+it in one repo out of four.
+
+**This is the series' actual scaling problem, and it is worth saying plainly
+next to the infrastructure decisions above.** The Python half of this package is
+genuine reuse — clients, stores, boundaries, the snapshot contract, all imported
+for real by consumers that break loudly when it changes. The TypeScript half is
+aspirational. At three dashboards a fourth copy is an annoyance. At the number
+of dashboards this series is aiming for, it is N places to fix a provenance bug
+— in precisely the layer where a bug is an editorial failure rather than a
+cosmetic one, because it is the layer that tells a reader whether a number is
+real.
+
+### Two frictions that explain the stall, both small
+
+- **The package exports raw `.tsx`.** A consuming Next app needs
+  `transpilePackages: ['civic-dashboard-kit']` in `next.config.js`. One line,
+  undocumented until now.
+- **The pinning rule makes adoption deliberate.** Dependencies pin to immutable
+  commits, not `@main`, so adopting is a commit per dashboard rather than a
+  drive-by — correctly, but it means nothing happens by default.
+
+### Sequencing
+
+**901economy adopts first, alone, and runs on it before anything is backported.**
+It is the repo under active work, so a problem with the package surfaces where
+someone is already looking. Backport to 901justice and 901education after it has
+run through a real publish cycle.
+
+**What comes along and what does not.** In scope: `DataStatusPanel`,
+`SampleBadge`, and the `DataStatus`/`resolveStatus` pair, which is the §7 list
+minus `SourceLine`. `SourceLine` is a *standardization* (§7.1) — adopting it
+changes rendered attribution on every figure, which is an editorial change and
+belongs in its own reviewed step, not bundled into a mechanical deduplication.
+The chart and map primitives (`KpiCard`, `TrendChart`, `ChoroplethMap`,
+`lib/choropleth.ts`) stay out until rule-of-three is met on them independently,
+unchanged from §7's last paragraph — but they are the obvious next candidates,
+and they are the ones where sharing pays most.
 
 ## 8. The verification floor across the three dashboards
 
