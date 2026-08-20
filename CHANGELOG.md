@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
+  `source_line()`, `audit_all()`), promoted from 901justice's
+  `scripts/publication/eligibility.py`. Unlike the original, the file-loading
+  functions take the caller's `data/` directory as an explicit parameter instead
+  of deriving it from `__file__` — the toolkit doesn't assume where it lives
+  relative to a consuming repo.
+
 ## [0.2.0] — 2026-08-03
 
 Cut so consumers can pin a version instead of tracking `main`. Both dashboards
