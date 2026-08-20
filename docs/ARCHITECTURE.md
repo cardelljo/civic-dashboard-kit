@@ -160,24 +160,34 @@ to close that, and two are rejected:
 |---|---|
 | Browser fetches `/data/*.json` at runtime | **Rejected.** Turns a document into an SPA: loading flash, layout shift on cellular, and empty HTML for the crawlers and link-preview bots that journalists and advocates depend on. It also puts a torn or truncated read in front of a reader. |
 | Coolify deploy webhook rebuilds the image | **Rejected — it does not actually work here.** The image builds from the git context. With data no longer in git, `next build` inside that image has nothing to bake. This route only works if the data goes back into git, which is the thing §1.1 set out to stop. |
-| **Build on the server, publish by swapping a release directory** | **Adopted.** |
+| **Build on the server** | **Adopted.** |
 
 The adopted mechanism, run by the pipeline container after a successful
-extraction (or after an approval flips a `pending_review` run):
+extraction (or after an approval flips a `pending_review` run), is two required
+steps and one cheap optional one:
 
 ```
-build_data_files.py            → data/*.json into the build workspace
+build_data_files.py            → data/*.json
 validate_snapshots.py --strict → gate; a failure stops here and publishes nothing
-next build                     → out/ (code from the image, data from the workspace)
-write   releases/<timestamp>/  → a complete, self-contained static site
-flip    current -> releases/<timestamp>/     ← nginx root is the symlink
+next build                     → out/, into the directory nginx serves
 ```
 
-Properties this has and the JSON-only write does not: pages actually change;
-build-time imports and the compile step survive; the publish is atomic, because
-a symlink flip is; a half-finished build is never reachable; and rollback is a
-flip back, which is faster and less error-prone than a git revert plus a
-rebuild.
+That is the whole requirement. Pages change, build-time imports and the compile
+step survive, and GitHub is not in the path.
+
+**Optional, ~5 lines, worth taking:** build into `releases/<timestamp>/` and
+point nginx's root at a `current` symlink you flip at the end. A symlink flip is
+atomic, so nginx never serves a half-finished build, and keeping the previous
+release makes rollback a flip back instead of a rebuild. Take it if it is
+convenient; it is a refinement of the three lines above, **not a prerequisite for
+them.**
+
+**Scaled back, 2026-08.** An earlier revision of this section made release
+directories, a retention count, and a generated diff report all mandatory parts
+of the mechanism. They were imported from a first draft without re-checking
+whether they earned their place, and at three small dashboards they do not. The
+diff report in particular is retracted as a blocker — see the honest-cost
+section below.
 
 **Writes must be atomic at the file level too.** `Path(...).write_text()` on a
 file something else may be reading is a torn read waiting to happen — write to a
@@ -231,31 +241,30 @@ So the replacement has to be deliberate, not assumed. What already exists:
   append-only.
 - `validate_snapshots.py` gates the contract *before* publish.
 
-What does not exist yet and should: **retention of previous exports on the volume**
-so a published page can be compared against what it replaced, and a way to see
-that a figure changed without reading two JSON files by hand.
+**Corrected 2026-08 — this section overstated the loss, and a generated diff
+report is no longer a prerequisite for cutover.** Two things were conflated:
 
-**The release-directory mechanism above is what closes this**, and that is half
-its justification. Retained `releases/<timestamp>/` directories *are* the diff:
-the previous published `data/*.json` is still on disk, so "what changed since
-last night" is a comparison between two directories rather than an appeal to
-memory. Two pieces make it a review surface rather than just storage, and
-neither is optional:
+- **T3 (AI-extracted) data has a real, enforced gate**, and it is untouched by
+  any of this: `pending_review` → `/admin` approve/reject → an `approvals` row,
+  with `indicators_current` filtering on `status = 'success'`. That gate lives in
+  the schema, not in git, and no delivery mechanism can weaken it.
+- **T1/T2 data — the federal API pulls — was never gated by the diff.** §5's
+  extractor contract is explicit that the default `success` is right for T1/T2,
+  "which need no review." A push to `main` deploys with no PR and no required
+  review, so the commit diff was something a person *could* read afterward, not a
+  checkpoint that stopped a bad number. Losing it loses a retrospective
+  convenience, not a control.
 
-- **A retention count** — keep N releases (start at 14; a fortnight covers a bad
-  run noticed late) and prune older ones, so the volume does not grow without
-  bound.
-- **A diff report the publish step emits** — indicator id, previous value, new
-  value, for every figure that moved. Written into the release directory and
-  worth alerting on through n8n when a value moves more than a set threshold.
-  Reading two JSON files by hand is not a review surface; a list of what changed
-  is.
+The fabricated-placeholder incident this section invokes is a genuine scar, but
+it was caught by *review of the extractor code*, not by reading a data diff — and
+`validate_snapshots.py --strict` now rejects a sample or gap file outright, which
+is the specific defense against a repeat.
 
-Until the diff report exists, the loss is real and worth remembering rather than
-filed as solved. **Do not cut a dashboard over to volume publishing before it
-does** — the gate and the diff catch different failures, this project has already
-shipped fabricated placeholder values once, and cutover without the replacement
-is the moment that would go unnoticed.
+So: build the diff report if it proves useful, as a convenience for spotting a
+figure that moved unexpectedly. **Do not treat it as a blocker.** What actually
+protects a publish is already in place — `source_runs` recording every run
+server-side, `validate_snapshots.py --strict` gating the contract, and the T3
+approval gate for anything a model extracted.
 
 ## 1.2 The container boundary is audience, not language
 
