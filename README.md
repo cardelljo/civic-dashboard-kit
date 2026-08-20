@@ -209,6 +209,7 @@ values = extract_metrics(
 | `observations.py` | Append-only store: `Observation` dataclass + an NDJSON ledger materialized into an in-memory SQLite `observations_current` view. No server needed. |
 | `metrics.py` | A metric-ID registry pattern (label/unit/good-direction/description per metric) — pairs with `observations.py`. |
 | `postgres_store.py` | Same `Observation`/append-only design as `observations.py`, against a live Postgres connection — for higher data volume. Also implements the human-review gate for AI-extracted data (`pending_review` → `approve_run`/`reject_run`), with no external ticketing system required. |
+| `eligibility.py` | Publication eligibility gate: `is_publishable()` decides whether a figure may be quoted as a standalone persuasive claim outside the dashboard (blocks sample/gap-status and suppressed values), keyed off the same `_meta`/`DataStatus` contract as `snapshot.py`. Takes the caller's `data/` directory as a parameter — no assumption about where it lives relative to the consuming repo. |
 
 ## Choosing a store: `observations.py` vs. `postgres_store.py`
 

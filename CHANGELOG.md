@@ -6,6 +6,15 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Added — Python half
+
+- `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
+  `source_line()`, `audit_all()`), promoted from 901justice's
+  `scripts/publication/eligibility.py`. Unlike the original, the file-loading
+  functions take the caller's `data/` directory as an explicit parameter instead
+  of deriving it from `__file__` — the toolkit doesn't assume where it lives
+  relative to a consuming repo.
+
 ### Added — shared infrastructure
 
 - `db/bootstrap.sql` — the one-time, idempotent bootstrap for the shared Postgres
