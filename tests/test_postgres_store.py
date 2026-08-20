@@ -37,6 +37,9 @@ DATABASE_URL = os.environ.get("TOOLKIT_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL, reason="TOOLKIT_TEST_DATABASE_URL not set -- no Postgres available"
 )
+# The guard that keeps an all-skipped run from reading as a pass lives in
+# tests/test_ci_guards.py -- it cannot live here, because this module-level
+# `pytestmark` would skip it in exactly the case it exists to catch.
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS geographies (

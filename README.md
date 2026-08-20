@@ -16,6 +16,15 @@ where every published figure came from, and never let sample or unreviewed
 data pass as live — and kept re-solving them separately until a shared
 package made more sense than a third copy-paste.
 
+> **Scope: this package has two halves, published from this one repo.** A
+> Python distribution installed with pip (`pyproject.toml`, imports as
+> `toolkit.*`) and a small TypeScript package installed with npm
+> (`package.json`, `ui/`) — the canonical `DataStatus` union and the data-status
+> UI that renders it. Everything below describes the Python half except
+> [Adopting the TypeScript half](#adopting-the-typescript-half); the two share a
+> repo so the status vocabulary cannot drift, and
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7 records why, with the cost.
+
 ## Why this exists
 
 Most dashboard tooling optimizes for showing a number. This one optimizes
@@ -106,10 +115,15 @@ fred.series_observations("MPHNA", start="2020-01-01")
 from toolkit.bea import BeaClient
 
 bea = BeaClient(api_key="...")
-bea.regional_gdp(table_name="CAGDP1", geo_fips="28700", year="2023")
-# -> [{"geo_fips": "28700", "geo_name": "Memphis, TN-MS-AR (Metropolitan Statistical Area)",
-#      "period": "2023", "value": 102900.0}]
+bea.regional_gdp(table_name="CAGDP1", geo_fips="47157", year="2023", line_code="3")
+# -> [{"geo_fips": "47157", "geo_name": "Shelby", "period": "2023", "value": 85672928.0}]
+#    thousands of dollars
 ```
+
+**County, state, and BEA region only — the Regional dataset has no metro-area
+GDP**, and a CBSA code raises rather than returning empty. Verified against the
+live API; see `bea.py`'s module docstring for the evidence and what to do
+instead.
 
 **ArcGIS Feature Service** (server-side aggregation, not raw record dumps):
 
@@ -219,10 +233,147 @@ run. Start with `observations.py`; move to `postgres_store.py` when the
 NDJSON ledger's commit sizes or review burden actually become a problem, not
 before.
 
+> **For the 901 dashboards specifically, that choice is settled: all three use
+> Postgres.** The scale reasoning above still holds generally, which is why both
+> modules stay in the package — but it weighed only volume, and the deciding
+> factor turned out to be that a git-committed ledger makes the data layer depend
+> on a hosting account. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §1.
+> `observations.py` remains supported for genuinely file-shaped problems.
+
 Once you are on Postgres, how the instance is laid out across dashboards — one
 instance, one schema each, plus a shared PostGIS `geo` schema holding the
 boundary polygons they all plot — is recorded in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Adopting the TypeScript half
+
+One import path, no build step:
+
+```tsx
+import {
+  DataStatusPanel, SampleBadge, SourceLine, resolveStatus,
+  type DataSource, type DataStatus, type SourceLineProps,
+} from 'civic-dashboard-kit';
+```
+
+`DataStatus` is the same six values `snapshot.build_meta()` writes and
+`validate_meta()` now enforces — `live`, `mixed`, `sample`, `gap`, `manual`,
+`report-backed`. `resolveStatus({ isSample, status })` is the
+`status ?? (isSample ? 'sample' : 'live')` fallback for snapshots written before
+`status` existed; use it rather than re-deriving the rule, so your own components
+agree with these two.
+
+All three components are presentational. They take already-imported JSON as props
+and fetch nothing, because every dashboard in this series is a static export.
+
+### `SourceLine` — the standard attribution line
+
+Every figure is supposed to carry source and vintage. This fixes *how*:
+
+```tsx
+<SourceLine
+  source="BEA Regional GDP"          // optional — vintage is promoted if absent
+  vintage="2023"                     // optional — but not both
+  sourceUrl="https://apps.bea.gov/…" // optional; wraps the source name
+  geography="Memphis MSA"            // optional trailing context
+  caveat="Revised quarterly."        // optional; accepts markup
+/>
+// → Source: BEA Regional GDP↗ · 2023 · Memphis MSA Revised quarterly.
+```
+
+Separators are `·` so an absent field leaves no stray punctuation. The form is
+deliberately not configurable — a standard each dashboard restyles isn't one.
+What *is* local: `className` defaults to `data-note`, which every dashboard
+already defines with its own muted color, so the line picks up local theming
+without importing a palette. Pass `className` to place it in a different slot
+(justice's section subheaders, say).
+
+**Attribution and caveats are separate values.** Today most caveats are fused
+into the attribution string — `note="Source: TDOE TCAP Assessment Files. 2019-20
+canceled and 2020-21 disrupted by COVID; treat those years with caution."` — which
+makes them unsearchable and inconsistent. Split them:
+
+```tsx
+<SourceLine
+  source="TDOE TCAP Assessment Files"
+  vintage="2023-24"
+  caveat="2019-20 canceled and 2020-21 disrupted by COVID; treat those years with caution."
+/>
+```
+
+Not every `Source:` in your code is attribution. Some are genuine prose
+paragraphs that happen to open with the word — those stay prose. Convert the
+lines that are really *name + vintage + link*; see `docs/ARCHITECTURE.md` §7.1
+for the inventory that drew the line.
+
+### Install
+
+```
+npm install github:cardelljo/civic-dashboard-kit#351a0bbd     # pin a commit, not #main
+```
+
+Pin the same way the Python side does. `#main` means a push here can break your
+build with no commit in your repo — [CHANGELOG.md](CHANGELOG.md) names which
+half each release touched, so a JS consumer can tell which releases concern it.
+
+### Four steps in the consuming app
+
+Peer dependencies are `react` (18 or 19) and `lucide-react` (≥0.400.0); the
+components import `useState` and six lucide icons and nothing else.
+
+1. **`next.config.js`** — this package ships raw `.tsx`, so Next has to compile
+   it:
+
+   ```js
+   const nextConfig = { transpilePackages: ['civic-dashboard-kit'] };
+   ```
+
+2. **`tailwind.config.ts`** — add the package to `content`, or **the components
+   render unstyled.** Tailwind generates only classes it finds in `content`
+   globs and does not scan `node_modules`. This fails silently: the markup mounts
+   fine and simply has no styling.
+
+   ```ts
+   content: [
+     './pages/**/*.{js,ts,jsx,tsx,mdx}',
+     './components/**/*.{js,ts,jsx,tsx,mdx}',
+     './app/**/*.{js,ts,jsx,tsx,mdx}',
+     './node_modules/civic-dashboard-kit/ui/**/*.{js,ts,jsx,tsx}',
+   ],
+   ```
+
+3. **Define `brand.blue`** in your Tailwind theme. `DataStatusPanel` uses
+   `text-brand-blue` for its two "verify" links. Without the token those links
+   inherit body color — legible, but not obviously links.
+
+4. **Re-point your own `DataStatus`.** If your `lib/types.ts` declares the union,
+   re-export it from here instead of keeping a second copy:
+
+   ```ts
+   export type { DataStatus } from 'civic-dashboard-kit';
+   ```
+
+Then delete `components/data-status/SampleBadge.tsx` and
+`DataStatusPanel.tsx` and update their import sites. The component props are
+unchanged (`<SampleBadge isSample={…} status={…} />`,
+`<DataStatusPanel sources={…} />`), so nothing else moves.
+
+### Verifying the swap
+
+`npm run build` passing is not sufficient evidence in a repo with
+`typescript.ignoreBuildErrors: true` — it will build straight through a type
+error. Run `npx tsc --noEmit` explicitly, and look at the rendered panel: the
+Tailwind step above is the one that fails without erroring.
+
+Two different kinds of change here, worth reviewing differently:
+
+- **`SampleBadge` / `DataStatusPanel` are a like-for-like lift.** Props are
+  unchanged and the markup is identical to what your repo already had, so a clean
+  type-check plus a rendered page is enough.
+- **`SourceLine` changes what visitors see.** It standardizes a line the three
+  dashboards render three ways, so adopting it *should* alter your output —
+  `Source:` may move, punctuation changes, caveats separate from attribution.
+  Read the diff on the page, not just the build log.
 
 ## Design principles
 

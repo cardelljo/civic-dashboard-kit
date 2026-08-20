@@ -1,14 +1,137 @@
 # Changelog
 
+Entries name **which half** changed — Python (pip, `toolkit.*`) or TypeScript
+(npm, `ui/`) — because one tag covers both and a consumer of one half should be
+able to tell at a glance whether a release concerns it.
+
 ## [Unreleased]
 
-### Added
+### Added — Python half
+
 - `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
   `source_line()`, `audit_all()`), promoted from 901justice's
   `scripts/publication/eligibility.py`. Unlike the original, the file-loading
   functions take the caller's `data/` directory as an explicit parameter instead
   of deriving it from `__file__` — the toolkit doesn't assume where it lives
   relative to a consuming repo.
+
+### Added — shared infrastructure
+
+- `db/bootstrap.sql` — the one-time, idempotent bootstrap for the shared Postgres
+  instance: all four schemas (`economy`, `education`, `justice`, `geo`), four
+  roles, grants, per-role `search_path`, and `geo.boundaries` from
+  ARCHITECTURE §4. One script for all three dashboards, because a single database
+  means the roles interlock and separate files would impose an unenforced run
+  order. Recorded as §3.1.
+  - Namespaces come from a per-role `search_path`, not table-name prefixes —
+    which is what lets `postgres_store`'s unqualified SQL serve every dashboard.
+  - `geo` is owned by a dedicated `geo_loader`; the app roles get `SELECT` only,
+    so a shared schema is not controlled by one dashboard.
+  - No passwords in the file (public repo): roles get `LOGIN` with none, and
+    cannot authenticate until `\password <role>` is run.
+  - Verified on real Postgres 18 + PostGIS 3.6 — idempotent across two runs, and
+    901economy's `schema.sql` applied as `economy_app` lands its 6 tables in
+    `economy`, with `geo` writes correctly refused.
+
+### Fixed — Python half
+
+- **`bea.py` documented a call that cannot work.** Its module docstring and the
+  README quickstart both showed `geo_fips="28700"` returning a "Memphis,
+  TN-MS-AR (Metropolitan Statistical Area)" row. Checked against the live API:
+  the CAGDP tables are county/state/BEA-region only. `GetParameterValuesFiltered`
+  for CAGDP1's GeoFips returns 3,187 values with **zero** metro entries,
+  `GeoFips=MSA` is rejected, and no `MAGDP*` table exists in the Regional
+  dataset. A CBSA code **raises** (APIErrorCode 101) rather than returning empty,
+  so this mattered: it taught a call that fails. Both now use a county FIPS with
+  a verified figure, and `regional_gdp`'s docstring says what `geo_fips` accepts.
+
+### Added — developer tooling
+
+- `scripts/dev-postgres.sh` — a local Postgres 18 + PostGIS 3.6 cluster matching
+  the deployed instance, installed from PGDG (Ubuntu 24.04 ships only 16). Takes
+  `pytest` from *31 passed / 8 skipped* to **39 passed / 0 skipped**, so
+  `postgres_store` changes are verifiable without CI. Port 5433 to leave a system
+  `postgresql-16` alone; `initdb --locale=C` for the reason in ARCHITECTURE §3.
+- The `civic-dashboard-dev` skill now records which credentials a Claude cloud
+  session actually has, which are verified working, and that `DATABASE_URL`
+  names an unreachable private host — so sessions stop speculating where one
+  live call would settle it.
+
+### Changed — CI
+
+- The Python job's Postgres service is `postgis/postgis:18-3.6-alpine`, matching
+  the image the Coolify host actually runs rather than the `16-3.4` this repo
+  guessed at in 0.3.0. Major version included: the point of the service container
+  is to be evidence about the database `postgres_store` will really write to.
+  Nothing in the store is version-sensitive — no `ON CONFLICT`, `MERGE`, window
+  function, or `LATERAL`, and its types all predate 16 — so this is a
+  verification fix, not a compatibility one. docs/ARCHITECTURE.md §3 records the
+  image, and the collation choice the alpine variant forces at `initdb`.
+
+## [0.3.0] — not yet tagged
+
+**Both halves.** This is the release that makes the repo dual-published
+(docs/ARCHITECTURE.md §7).
+
+### Added — TypeScript half (new)
+
+- `package.json` beside `pyproject.toml`, and a `ui/` directory outside `src/`.
+  Install with `npm install github:cardelljo/civic-dashboard-kit#<sha>`; pin a
+  commit, not `#main`, exactly as the Python side does.
+- `ui/types.ts` — the canonical `DataStatus` union, plus `resolveStatus()`, the
+  `status ?? (isSample ? 'sample' : 'live')` fallback for snapshots written
+  before `status` existed. Both components route through it instead of carrying
+  their own copy of the rule, which is what the three dashboards did.
+- `ui/SampleBadge.tsx` and `ui/DataStatusPanel.tsx`, lifted from 901economy
+  `bd3f1bb1`. The three dashboards' copies were byte-identical apart from
+  whether `DataStatus` was declared locally or imported, so the props are
+  unchanged and adoption is a swap of import paths.
+- `ui/SourceLine.tsx` — the standard attribution line,
+  `Source: {source}↗ · {vintage} · {geography}` plus a separate `caveat` slot.
+  **Not a lift.** Nothing shared existed: an inventory of ten `Source:` call
+  sites found three different kinds of thing sharing a prefix — structured
+  attribution (4), attribution fused to a methodology caveat (4), and prose that
+  merely opens with the word (2). This owns the first and gives the caveat its own
+  value instead of a string literal. `source` is optional because 901economy has
+  no per-row publisher name; vintage is promoted when it is absent. Rationale and
+  the inventory are in docs/ARCHITECTURE.md §7.1.
+  - Unlike the two data-status components, **adopting this changes rendered
+    output** — that is what standardizing means here. Review it on the page.
+- Ships raw `.tsx`, no build step. Consumers add `transpilePackages` and — this
+  one fails silently — add the package to their Tailwind `content` globs, or the
+  components render unstyled. See the README's "Adopting the TypeScript half".
+
+### Changed — Python half
+
+- **`snapshot.DATA_STATUSES` enumerates the six valid `_meta.status` values, and
+  `build_meta()` now raises `SnapshotError` on anything else.** `status` was an
+  unconstrained `str`, so `status="livee"` produced a valid-looking snapshot that
+  renders as sample data in the frontend's fallback path. Potentially breaking
+  for a caller passing a status outside the union — every committed
+  `_meta.status` across all three dashboards was checked first and all are on the
+  union, so no existing data file or pipeline is affected.
+- `validate_meta()` checks `_meta.status` for membership, not just presence. Only
+  reachable on the `allow_sample=True` path; the default path already required
+  exactly `"live"`.
+
+### Added — CI and tests
+
+- `tests/test_data_status_union.py` fails if `snapshot.DATA_STATUSES` and the
+  `ui/types.ts` union stop matching. It runs in the **Python** job, so a JS-only
+  change adding a status cannot land without the Python side. §7 justified one
+  repo on this coupling; before this test the coupling was an intention.
+- `tests/test_ci_guards.py` fails the build when `TOOLKIT_TEST_DATABASE_URL` is
+  unset in CI. `pytest` exits 0 when every Postgres test skips, so a dropped
+  `env:` block read as a passing build. It lives in its own module because
+  `test_postgres_store.py`'s module-level `pytestmark` would skip the guard in
+  exactly the case it detects.
+- A `typescript` CI job: `tsc --noEmit` and `vitest run` (28 tests over the three
+  components and `resolveStatus`). `SourceLine`'s tests assert the rendered text
+  including separator placement, since the fixed form is the thing being
+  standardized.
+- The Python job's Postgres service is now `postgis/postgis:16-3.4` rather than
+  `postgres:16`, matching the image the shared instance is provisioned from
+  (§3), so a future test needing PostGIS does not need a CI change first.
 
 ## [0.2.0] — 2026-08-03
 

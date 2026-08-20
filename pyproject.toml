@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "civic-dashboard-kit"
-version = "0.2.0"
+version = "0.3.0"
 description = "Data-acquisition clients, a source-provenance contract, and an append-only observations store for building honest, sourced civic data dashboards."
 readme = "README.md"
 license = { text = "Apache-2.0" }

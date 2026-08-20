@@ -1,3 +1,7 @@
+# Both halves of the package gate every PR. A JS-only change must not be able
+# to ship without the Python tests, or vice versa (docs/ARCHITECTURE.md §7) --
+# `tests/test_data_status_union.py` in the python job reads `ui/types.ts`, so
+# the two are not independent even when a diff touches only one language.
 name: Test
 
 on:
@@ -6,11 +10,16 @@ on:
   pull_request:
 
 jobs:
-  test:
+  python:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Exactly the image the Coolify host runs (docs/ARCHITECTURE.md §3), not
+        # merely the same family: matching the major version is what makes this
+        # job evidence about the database `postgres_store` will really write to,
+        # and matching PostGIS means a test that starts depending on it needs no
+        # CI change first.
+        image: postgis/postgis:18-3.6-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -35,5 +44,28 @@ jobs:
 
       - name: Run tests
         env:
+          # tests/test_ci_guards.py fails the job if this is missing, rather
+          # than letting the Postgres tests skip into a green build.
+          CI: 'true'
           TOOLKIT_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civic_toolkit_test
-        run: pytest -v
+        # -rs prints the reason for every skip, so the log shows what did not run.
+        run: pytest -v -rs
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # No build step -- this package ships raw .tsx and consumers transpile it.
+      # tsc is therefore the only thing that would catch a type error before a
+      # dashboard's own build does.
+      - run: npm run typecheck
+
+      - run: npm test
