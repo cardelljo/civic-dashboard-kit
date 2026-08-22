@@ -598,12 +598,36 @@ the exact GEOIDs §5 already recorded (Memphis is `4748000`); a rerun of
 `load_boundaries.py` stays at 7 rows rather than 14; every loaded geometry
 reports `ST_MultiPolygon`.
 
-**Found in the process, not fixed here:** `ST_IsValid` flags Memphis and
-Collierville — the two multi-part places (2 and 5 parts respectively, real
-non-contiguous annexations) — as "nested shells," at simplification tolerance
-0 as well as the loader's default, so this is a property of the TIGER source
-geometry, not something this converter's simplification introduces. Same
-posture as §6.1's zip-code finding: recorded here, not silently repaired.
+**Correction, 2026-08:** this originally reported `ST_IsValid` flagging Memphis
+and Collierville as "nested shells" at tolerance 0 as well as the default, and
+concluded that ruled out this converter and pointed at the TIGER source
+geometry itself. That conclusion was wrong. 901economy's `pipeline/fetch_boundaries.py`
+independently found the real cause building the same layer from the same
+source: **`toolkit.geo.parse_shp` didn't nest interior rings** — every
+shapefile part became its own top-level polygon, so an enclave (a ring wholly
+inside another ring of the same record — an unincorporated pocket inside a
+city) rendered as a separate solid polygon instead of a hole in its parent.
+Memphis has one such enclave and Collierville has four; "2 and 5 parts" in the
+original text *was* the bug, not evidence against it — a correctly nested
+Memphis is one polygon with one hole, not two polygons.
+
+Fixed in `toolkit.geo` (`nest_rings`, `signed_area`, `point_in_ring` — economy's
+functions, lifted in more or less as written, per their own note that they were
+written to be lifted). `parse_shp`'s return shape is unchanged; only the ring
+grouping inside it is now correct. Re-running `fetch_municipalities.py` against
+the same file now reports Memphis as one polygon with one interior ring and
+Collierville as one polygon with four, and every one of the seven passes
+`ST_IsValid`, holes included — verified against real Postgres 18 + PostGIS 3.6,
+not just at the GeoJSON level (`ST_NumInteriorRings` after `ST_Dump` reports 1
+and 4 respectively).
+
+**Not re-verified here:** §6.1's zip-code finding (2 of 31 self-intersecting)
+predates this fix and used 901justice's own pre-converted files, not this
+converter, so it isn't automatically corrected by it — but a donut-shaped zip
+code is exactly the shape this bug mishandles, so the same root cause is
+plausible there too. Confirming it needs 901justice's original shapefiles,
+which this repo doesn't have; recorded here rather than left implying the
+zip finding is independently confirmed as real self-intersection.
 
 
 
