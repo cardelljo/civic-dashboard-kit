@@ -117,6 +117,75 @@ def simplify_line(points: list[tuple[float, float]], tolerance: float) -> list[t
     return simplified if len(simplified) >= 4 else points
 
 
+def signed_area(ring: list[list[float]]) -> float:
+    """Shoelace signed area. Negative == clockwise == a shapefile outer ring."""
+    total = 0.0
+    for i in range(len(ring) - 1):
+        x1, y1 = ring[i]
+        x2, y2 = ring[i + 1]
+        total += x1 * y2 - x2 * y1
+    return total / 2.0
+
+
+def point_in_ring(point: list[float], ring: list[list[float]]) -> bool:
+    """Even-odd ray cast. Boundary cases are not meaningful here -- a hole's
+    vertex never lies exactly on its parent's simplified edge."""
+    x, y = point[0], point[1]
+    inside = False
+    for i in range(len(ring) - 1):
+        x1, y1 = ring[i]
+        x2, y2 = ring[i + 1]
+        if (y1 > y) != (y2 > y):
+            x_cross = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if x < x_cross:
+                inside = not inside
+    return inside
+
+
+def nest_rings(rings: list[list[list[float]]]) -> list[list[list[list[float]]]]:
+    """Assemble one shape's flat shapefile rings into GeoJSON polygons, holes included.
+
+    A shapefile polygon record can carry several rings, and a plain "one ring,
+    one polygon" reading -- what this module did before this function existed
+    -- renders an enclave (a ring wholly inside another ring of the same
+    record, like an unincorporated pocket inside a city) as its own solid
+    polygon instead of a hole in its parent. The visual symptom is filled-in
+    holes; the structural one is what PostGIS's `ST_IsValid` reports as
+    "nested shells" once the polygon is loaded, which is indistinguishable
+    from a genuinely corrupt source geometry until you check whether the
+    source has enclaves at all.
+
+    Returns MultiPolygon coordinates: a list of polygons, each `[outer, *holes]`.
+    Output winding is normalised to RFC 7946 (exterior counter-clockwise,
+    interior clockwise), the reverse of the shapefile convention. Leaflet
+    fills by even-odd and ignores winding, so this is for the benefit of
+    stricter consumers -- PostGIS chief among them.
+    """
+    outers: list[list[list[float]]] = []
+    holes: list[list[list[float]]] = []
+    for ring in rings:
+        (holes if signed_area(ring) > 0 else outers).append(ring)
+
+    # Reverse to RFC 7946 exterior winding.
+    polygons: list[list[list[list[float]]]] = [[list(reversed(ring))] for ring in outers]
+
+    for hole in holes:
+        parent = next(
+            (i for i, ring in enumerate(outers) if point_in_ring(hole[0], ring)),
+            None,
+        )
+        if parent is None:
+            # No containing outer ring. Keeping the ring as its own polygon
+            # preserves the area rather than silently dropping geography.
+            polygons.append([list(reversed(hole))])
+        else:
+            # Already counter-clockwise as a shapefile hole; RFC 7946 wants
+            # interior rings clockwise, so reverse for symmetry with the outer.
+            polygons[parent].append(list(reversed(hole)))
+
+    return polygons
+
+
 def parse_shp(data: bytes, transform: Callable[[float, float], tuple[float, float]], tolerance: float) -> list[list[list[list[float]]]]:
     shapes = []
     pos = 100
@@ -145,7 +214,7 @@ def parse_shp(data: bytes, transform: Callable[[float, float], tuple[float, floa
             struct.unpack("<2d", content[points_start + i * 16:points_start + (i + 1) * 16])
             for i in range(num_points)
         ]
-        polygons = []
+        rings = []
         for idx in range(num_parts):
             raw_ring = points[parts[idx]:parts[idx + 1]]
             raw_ring = simplify_line(raw_ring, tolerance)
@@ -156,8 +225,8 @@ def parse_shp(data: bytes, transform: Callable[[float, float], tuple[float, floa
             if ring and ring[0] != ring[-1]:
                 ring.append(ring[0])
             if len(ring) >= 4:
-                polygons.append([ring])
-        shapes.append(polygons)
+                rings.append(ring)
+        shapes.append(nest_rings(rings))
     return shapes
 
 
