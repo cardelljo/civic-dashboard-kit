@@ -9,12 +9,14 @@ pip install -e ".[ai,postgres]"
 pytest
 ```
 
-Postgres integration tests (`tests/test_postgres_store.py`) skip automatically
-if `TOOLKIT_TEST_DATABASE_URL` isn't set — they need a real Postgres, since
-the store's `indicators_current` view relies on `DISTINCT ON`, which has no
-SQLite equivalent. **A skipped test is not a passing test**: `pytest` still
-exits 0, so check the counts, not the exit code. `pytest` should report
-**39 passed, 0 skipped**; 8 skips means you have no database.
+Postgres integration tests (`tests/test_postgres_store.py`, `test_boundaries.py`)
+skip automatically if `TOOLKIT_TEST_DATABASE_URL` isn't set — they need a real
+Postgres, since the store's `indicators_current` view relies on `DISTINCT ON`,
+which has no SQLite equivalent. **A skipped test is not a passing test**:
+`pytest` still exits 0, so check the counts, not the exit code. With a database
+up, `pytest` should report **all but one test passing, one skipped** (the
+skip is `test_ci_guards.py`'s own CI-only check — expected locally, not a sign
+of a missing database). A double-digit skip count means you have no database.
 
 If you already run Postgres locally, any 16+ instance will do:
 
