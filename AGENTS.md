@@ -7,6 +7,39 @@ shared `geo` schema and boundary loaders, and a TypeScript `ui/` package for the
 data-status components. Every dashboard pins this repo to an immutable commit and
 installs it via pip/npm — never `@main`.
 
+## Starting a session
+
+A new thread can start with something this short, because the files below carry the
+context:
+
+> Read AGENTS.md, then docs/TASKS.md's Next Up section, then docs/PROJECT_NOTES.md for
+> background — then [pick up the next ticket / describe the task].
+
+## Keeping these docs current
+
+This only works if it stays accurate. One trigger, one place to update:
+
+- Finish a ticket → a dated entry in `docs/TASKS.md`'s "Done" log.
+- A ticket opens, closes, or gets superseded → sync `docs/TASKS.md`'s Next Up list.
+- Learn something that spans multiple tickets, or isn't task-shaped at all → a
+  `docs/PROJECT_NOTES.md` entry, not buried in one ticket's prose.
+- Find a durable rule or gotcha that will bite again → a non-negotable rule below.
+- **Write a deep-dive doc on a specific topic** (a data-source research note, an
+  integration plan, a standalone review) **→ it gets linked from a `docs/TASKS.md`
+  ticket, existing or new, in the same commit.** A plan or insight that isn't attached
+  to a task doesn't stop being useful, but it does stop being findable — this project
+  has already accumulated deep, well-researched standalone docs in sibling repos that
+  no ticket points at, which is indistinguishable from work nobody knows exists. If
+  the doc doesn't fit an existing ticket, it gets a new one — even a one-line ticket
+  whose body is "see `<doc>`" is enough to make it discoverable from Next Up.
+- New work that doesn't fit an existing ticket → its own ticket, not folded into an
+  unrelated one.
+
+(Considered a skill for this instead of an `AGENTS.md` section — rejected because a
+skill only fires when invoked or its trigger matches, and the point is a convention
+that applies automatically, every session, with nobody needing to remember to invoke
+it.)
+
 ## Read before writing code
 
 - `docs/TASKS.md` — the living task list. Read its **Next Up** section first, not the
