@@ -19,9 +19,10 @@ split matters because the audiences differ:
 **Delegates never load this skill.** If a rule must reach Codex, it goes in `AGENTS.md`.
 Change operational test rules there first; this file summarizes.
 
-*All three dashboards now have an `AGENTS.md`, and they differ deliberately — a rule that
-holds for one is not assumed to hold for the others. Read the one in the repo you are
-editing; do not carry a non-negotiable across repos from memory.*
+*All four repos — the three dashboards and this toolkit — now have an `AGENTS.md`, and
+they differ deliberately. A rule that holds for one is not assumed to hold for the
+others. Read the one in the repo you are editing; do not carry a non-negotiable across
+repos from memory.*
 
 ## 1. Verify, then claim
 
@@ -68,8 +69,11 @@ Those run from the pipeline container on the host.
 
 **For database work, build a local Postgres instead:** `scripts/dev-postgres.sh`
 gives Postgres 18 + PostGIS 3.6 matching the deployed instance, and takes
-`pytest` from *31 passed / 8 skipped* to **39 passed / 0 skipped**. Use it before
-claiming anything about `postgres_store`.
+`pytest` from a double-digit skip count to **one** — `test_ci_guards.py`'s own
+CI-only check, expected to skip locally. It's not always still running between
+sessions: `pg_isready -h localhost -p 5433` before assuming it's up, rerun the
+script if not (idempotent). Use it before claiming anything about
+`postgres_store` or `boundaries` works.
 
 **No `ANTHROPIC_API_KEY`** is set (only `ANTHROPIC_BASE_URL`), so `ai_extract` /
 T3 extraction paths cannot be exercised live.
@@ -80,7 +84,9 @@ T3 extraction paths cannot be exercised live.
 |---|---|
 | Binds several dashboards (DB, PostGIS, boundaries) | `civic-dashboard-kit/docs/ARCHITECTURE.md` |
 | Toolkit behavior, choosing a store | `civic-dashboard-kit/README.md` |
-| One dashboard only | that repo's `PLAN.md` / `docs/` |
+| What to work on next, in this repo | `civic-dashboard-kit/docs/TASKS.md`'s **Next Up** |
+| A cross-repo finding that isn't a decision or a task (a sibling repo's actual state as last checked, precedent for a judgment call) | `civic-dashboard-kit/docs/PROJECT_NOTES.md` |
+| One dashboard only | that repo's `PLAN.md` / `docs/TASKS.md` / `docs/PROJECT_NOTES.md` |
 
 Decisions here get revisited on evidence — that is welcome — but cite the section you are
 contradicting. **A new decision that binds a sibling repo is recorded in the shared file
