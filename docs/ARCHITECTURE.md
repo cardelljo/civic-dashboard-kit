@@ -559,11 +559,21 @@ vintage stays at 8 rows rather than becoming 16; every loaded geometry reports
 `ST_MultiPolygon`.
 
 **Found in the process, not fixed here:** `ST_IsValid` flags 2 of the 31 zip
-polygons (self-intersecting shells) — a data-quality issue in the source
-shapefile conversion, not something the loader introduces or should silently
-repair. Whoever runs the real load should expect `ST_IsValid` to flag these two
-and decide whether to re-derive them from source before loading, not treat a
-loader that reports success as proof the geometries are clean.
+polygons (self-intersecting shells) — at the time, attributed to a data-quality
+issue in the source shapefile conversion, not something the loader introduces
+or should silently repair. **Revisit in light of §6.2:** the same symptom
+("nested shells") on the municipality layer turned out not to be a source-data
+problem at all but a bug in `toolkit.geo.parse_shp` not nesting interior rings
+as holes — and a donut-shaped zip code is exactly the shape that bug
+mishandles, so the same root cause is plausible here too. This finding
+predates that fix and used 901justice's own pre-converted GeoJSON rather than
+`parse_shp`'s output, so it is not automatically corrected by it; confirming
+either way needs 901justice's original shapefiles, which this repo doesn't
+have (see §6.2's "Not re-verified here" note). Whoever runs the real load
+should still expect `ST_IsValid` to flag these two and decide whether to
+re-derive them from source before loading — but should treat that as an open
+question of converter-bug-vs-source-defect, not settled evidence of a source
+data-quality issue.
 
 ### 6.2 The `municipality` layer, from Census TIGER
 
