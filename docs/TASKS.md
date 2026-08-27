@@ -11,13 +11,6 @@ dated entry under "Done" when you finish anything nontrivial.
 
 ## Next Up
 
-**Self-contained, no blockers:**
-- Tighten `docs/ARCHITECTURE.md` §6.1's zip-code `ST_IsValid` finding (2 of 31
-  self-intersecting) now that PR #17 found the real cause of the same symptom on the
-  municipality layer (§6.2). Re-verifying needs 901justice's original shapefiles,
-  which this repo doesn't have — this is likely a doc-wording fix (flag the same-root-
-  cause plausibility explicitly, which §6.2 already does) rather than a code fix.
-
 **Blocked on something outside this repo:**
 - Push the `v0.2.0` tag — `git tag -a v0.2.0 351a0bbd -m "0.2.0" && git push origin
   v0.2.0`. Needs a normal machine; this environment's git proxy 403s on `refs/tags`
@@ -57,6 +50,15 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
 ---
 
 ## Done — dated log
+
+### 2026-08-27 — Doc fix: §6.1's zip `ST_IsValid` finding revisited in light of §6.2
+- `docs/ARCHITECTURE.md` §6.1 stated the 2-of-31 self-intersecting zip polygons as a
+  flat source-data-quality issue. §6.2 later found the same "nested shells" symptom on
+  the municipality layer was actually a `toolkit.geo.parse_shp` ring-nesting bug (fixed
+  in PR #17), not bad source data — and a donut-shaped zip is exactly the shape that
+  bug mishandles. Reworded §6.1 to flag that plausibility and point to §6.2, without
+  claiming it's confirmed: re-verifying needs 901justice's original shapefiles, which
+  this repo doesn't have. Doc-only change, no code touched.
 
 ### 2026-08 — `geo.boundaries`: the shareable-layer loaders
 - `toolkit/boundaries.py` + `scripts/load_boundaries.py` (PR #12) — loads a GeoJSON
