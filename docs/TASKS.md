@@ -11,6 +11,22 @@ dated entry under "Done" when you finish anything nontrivial.
 
 ## Next Up
 
+**Rule-of-three flag, tracked at the user's explicit request (not yet a third
+dashboard's need — see `AGENTS.md`'s rule-of-three rule before extracting):**
+- `geo.boundaries` (`docs/ARCHITECTURE.md` §4) is polygon-only: the schema column is
+  `geometry(MultiPolygon, 4326)` and `toolkit.boundaries.load_geojson`'s insert
+  hardcodes `ST_Multi(ST_GeomFromGeoJSON(...))` — verified directly, no point-geometry
+  table or loader exists anywhere in `toolkit.geo`/`toolkit.boundaries` today.
+  901education needs individual school locations (address points) plotted on a map,
+  which no existing boundary layer captures — a school is a point, not a polygon.
+  Only one dashboard has this need so far (checked `docs/PROJECT_NOTES.md` and this
+  file for any other mention of point/address layers — none), so this is exactly the
+  situation the rule-of-three convention normally holds out; flagged as a real ticket
+  here anyway because the user asked for it directly, not because the bar has been
+  met. Needs a design decision when picked up: a new `geo.points` table paralleling
+  `geo.boundaries`'s `(layer, geo_key, name, vintage)` shape with
+  `geometry(Point, 4326)`, vs. some other structure — not decided here.
+
 **Self-contained, no blockers (found while working in 901education, 2026-08-28,
 verified against this repo's own source — sequence 1 then 2, both gate
 901education's planned `scripts/fetch_mscs_charter_report.py`):**
