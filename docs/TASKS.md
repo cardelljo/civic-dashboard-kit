@@ -11,6 +11,27 @@ dated entry under "Done" when you finish anything nontrivial.
 
 ## Next Up
 
+**Self-contained, no blockers (found while working in 901education, 2026-08-28,
+verified against this repo's own source — sequence 1 then 2, both gate
+901education's planned `scripts/fetch_mscs_charter_report.py`):**
+1. Split a `[pdf]` extra out of `[ai]` in `pyproject.toml`. `ai = [...]` currently
+   bundles `pymupdf` with all three LLM SDKs (`anthropic`, `openai`,
+   `google-generativeai`) plus `langextract`, unsplit — but `ai_extract.py` already
+   selects exactly one provider at runtime (`AI_PROVIDER` or first available key,
+   Anthropic → OpenAI → Google) and returns `{}` if none is configured. A consumer
+   who only wants deterministic PDF text (`pymupdf`, no LLM, no API key) shouldn't
+   have to install three unused SDKs to get it. Fix: `[pdf]` = pymupdf alone;
+   per-provider `[anthropic]` / `[openai]` / `[google]` extras; keep `[ai]` as a
+   convenience meta-extra pulling all of them. No new dependency, unblocks anything
+   needing only deterministic PDF text.
+2. Add table/repeating-row extraction to `toolkit/pdf_report.py`. Verified directly:
+   `apply_regex_extractors()` runs one `re.search` per field (first match only) and
+   `extract_metrics()` (regex-first, AI-fallback) both return exactly one value per
+   schema field — there's no function returning a list of rows. Fine for scalar
+   report fields, but blocks extracting a repeating table (901education's MSCS
+   charter authorizer report: ~55 schools × 4 scorecard/rate columns). Needs a
+   table extractor that returns a list of records, not a flat dict.
+
 **Blocked on something outside this repo:**
 - Push the `v0.2.0` tag — `git tag -a v0.2.0 351a0bbd -m "0.2.0" && git push origin
   v0.2.0`. Needs a normal machine; this environment's git proxy 403s on `refs/tags`
@@ -46,6 +67,29 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
 - 901justice: same migration planning prompt, net-new Postgres build (no existing
   store module to migrate). Unlike education, no history question blocks it — this
   half is ready to delegate for planning today.
+
+---
+
+## Parked — tracked but not Next Up
+
+Real, wanted work that isn't a priority queue entry — usually because a repo
+convention (like rule-of-three) holds it out on purpose. Move an item up to Next Up
+when its gate clears or the user asks for it directly.
+
+- **Address points (individual locations) in the shared `geo` schema.**
+  `geo.boundaries` (`docs/ARCHITECTURE.md` §4) is polygon-only: the schema column is
+  `geometry(MultiPolygon, 4326)` and `toolkit.boundaries.load_geojson`'s insert
+  hardcodes `ST_Multi(ST_GeomFromGeoJSON(...))` — verified directly, no point-geometry
+  table or loader exists anywhere in `toolkit.geo`/`toolkit.boundaries` today.
+  901education needs individual school locations (address points) plotted on a map,
+  which no existing boundary layer captures — a school is a point, not a polygon.
+  Only one dashboard has this need so far (checked `docs/PROJECT_NOTES.md` and this
+  file for any other mention of point/address layers — none), so this is exactly the
+  situation `AGENTS.md`'s rule-of-three convention normally holds out; kept here
+  rather than in Next Up for that reason, not because the work isn't wanted. Needs a
+  design decision when picked up: a new `geo.points` table paralleling
+  `geo.boundaries`'s `(layer, geo_key, name, vintage)` shape with
+  `geometry(Point, 4326)`, vs. some other structure — not decided here.
 
 ---
 
