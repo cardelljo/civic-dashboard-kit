@@ -11,6 +11,14 @@ dated entry under "Done" when you finish anything nontrivial.
 
 ## Next Up
 
+**Civic Engagement Suite & AI Story Engine (Parallel Track — see \`docs/CIVIC_ENGAGEMENT_SUITE.md\` for full 5-track WBS):**
+- [ ] **Track 1:** Shared Type Definitions (\`src/types/engagement.ts\`, \`src/types/crossDomain.ts\`, \`src/types/storyboard.ts\`).
+- [ ] **Track 2:** Core Action & Advocacy Components (\`AdvocacyDrawer.tsx\`, \`PrintFactSheet.tsx\` 1-pager generator, \`ToraRequestGenerator.tsx\`, \`CivicCalendarSync.tsx\`).
+- [ ] **Track 3:** Scrollytelling Visualizers (\`StoryboardModal.tsx\`, \`SystemFunnelVisualizer.tsx\`, \`NeighborhoodCompositeLens.tsx\`).
+- [ ] **Track 4:** AI Storyboard Generation Engine (\`contextAggregator.ts\`, \`storyboardEngine.ts\`, Next.js Edge route template).
+- [ ] **Track 5:** Multi-Dashboard Integration across \`901education\`, \`901justice\`, and \`901economy\`.
+
+
 **Self-contained, no blockers (found while working in 901education, 2026-08-28,
 verified against this repo's own source — sequence 1 then 2, both gate
 901education's planned `scripts/fetch_mscs_charter_report.py`):**
