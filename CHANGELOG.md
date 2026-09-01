@@ -8,6 +8,44 @@ able to tell at a glance whether a release concerns it.
 
 ### Added — Python half
 
+- `postgres_store.Observation` gained three optional, nullable fields — `unit`,
+  `row_key`, and `dimensions` (JSONB) — so one store module can serve a dashboard
+  whose observation grain is finer than 901economy's. 901education needs them:
+  all 56,274 rows of its NDJSON ledger set `row_key`, and its
+  `build_data_files.py` queries that column directly.
+  - `append()` names a column only when some observation in the batch sets it,
+    so a batch setting none emits exactly the statement it always did.
+    901economy's live `indicators` table, which has none of these columns, keeps
+    working with no `ALTER TABLE` and no change at its call sites.
+  - Setting one against a table that lacks the column raises `UndefinedColumn`
+    rather than silently dropping the value.
+  - **`dimensions` is an open dict, not named columns, on purpose.** A
+    dashboard's extra axes are its own vocabulary — education has grade bands,
+    justice has offense types and dispositions. Naming them here would grow this
+    dataclass into the union of every domain's terminology, which is the
+    opposite of what a shared store is for. An earlier draft of this change did
+    add `subject` and `grade` as columns; that was wrong twice over — it put one
+    dashboard's words in shared code, and `subject` turned out to be uniquely
+    determined by `indicator_id` (every `ela-proficiency` row has subject
+    `ela`), so it carried no information at all. Anything derivable from the
+    indicator id does not belong in an observation.
+  - Note for anyone adding these columns to an existing database:
+    `indicators_current` is `SELECT DISTINCT ON (...) i.*`, and a view fixes its
+    column list at CREATE time — an `ALTER TABLE` alone will not surface them,
+    the view has to be recreated. Found while writing the tests.
+
+- `postgres_store.record_run()` gained six optional run-level provenance arguments —
+  `script`, `source_name`, `source_url`, `source_vintage`, `fetched_at`,
+  `content_hash` — mirroring what `observations.record_run()` records per run.
+  Same contract as above: a column is named only when its argument is supplied,
+  so a `source_runs` table without them is untouched.
+  - `fetched_at` is deliberately separate from `started_at` (which defaults to
+    `now()`). A backfilled historical run keeps the provider's real date instead
+    of the migration's; conflating the two would silently restamp history.
+  - The dedup *policy* built on `content_hash` stays in 901education
+    (`scripts/observations_utils.py`) — that is one dashboard's rule about when
+    an unchanged re-fetch should skip its append, not toolkit behaviour.
+
 - `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
   `source_line()`, `audit_all()`), promoted from 901justice's
   `scripts/publication/eligibility.py`. Unlike the original, the file-loading

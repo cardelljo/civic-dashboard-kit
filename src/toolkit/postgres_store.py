@@ -60,10 +60,20 @@ class Observation:
 
     `suppressed=True` means the source withheld the cell -- `value` must be
     None in that case, never a guess. Mirrors toolkit.observations.Observation;
-    field names differ to match db/schema.sql's `indicators` table
-    (`indicator_id` not `metric_id`, `demographic_group` not `student_group`,
-    no subject/grade -- 901economy encodes those dimensions in the
-    `indicator_id` slug itself, e.g. 'employment-tdl', per PLAN.md §3).
+    the field *names* differ to match a dashboard's `indicators` table
+    (`indicator_id` not `metric_id`, `demographic_group` not `student_group`).
+
+    The last three fields are optional and default to None. 901economy sets
+    none of them; 901education sets `unit`, `row_key` and `dimensions`.
+
+    `dimensions` is deliberately an open dict rather than named columns. A
+    dashboard's extra axes are its own vocabulary -- education has grade bands,
+    justice has offense types and dispositions -- and naming them here would
+    grow this dataclass into the union of every domain's terminology, which is
+    the opposite of what a shared store is for. Anything a dashboard can derive
+    from `indicator_id` does not belong here at all: education's `subject` was
+    dropped on exactly that basis, being uniquely determined by the id
+    ('ela-proficiency' is always subject 'ela').
     """
 
     indicator_id: str
@@ -74,6 +84,34 @@ class Observation:
     demographic_group: str = "all"
     source_url: str | None = None
     suppressed: bool = False
+    # Optional finer grain. A dashboard whose `indicators` table lacks these
+    # columns is unaffected: `append()` only names a column when some
+    # observation in the batch sets it, so a batch leaving all three None emits
+    # exactly the SQL it always did. 901economy sets none of them.
+    unit: str | None = None
+    # A stable per-cell identifier from the writing pipeline, when it has one.
+    # Opaque to this module; education's build step looks rows up by it.
+    row_key: str | None = None
+    # Dashboard-specific axes, stored as JSONB. Keys are the dashboard's own,
+    # not this module's -- see the class docstring for why they are not columns.
+    dimensions: dict | None = None
+
+
+# The Observation fields that map to `indicators` columns a consuming schema may
+# or may not define. Order is the column order used in INSERTs; keep it stable.
+OPTIONAL_COLUMNS = ("unit", "row_key", "dimensions")
+
+# Optional columns needing an adapter rather than being passed through as-is.
+JSON_COLUMNS = frozenset({"dimensions"})
+
+
+# Run-level provenance columns a consuming `source_runs` table may or may not
+# define, in INSERT order. Same optional-column contract as OPTIONAL_COLUMNS:
+# named only when the caller supplies a value. 901economy's table has none of
+# them; 901education's ledger records all six per run.
+OPTIONAL_RUN_COLUMNS = (
+    "script", "source_name", "source_url", "source_vintage", "fetched_at", "content_hash",
+)
 
 
 def record_run(
@@ -84,27 +122,53 @@ def record_run(
     row_count: int | None = None,
     review_artifact: dict | None = None,
     notes: str | None = None,
+    script: str | None = None,
+    source_name: str | None = None,
+    source_url: str | None = None,
+    source_vintage: str | None = None,
+    fetched_at: str | None = None,
+    content_hash: str | None = None,
 ) -> int:
     """Insert a source_runs row and return its run_id.
 
     `status='pending_review'` for a T3 extraction -- `append()` still attaches
     its rows to this run_id, but `indicators_current` won't surface them until
     a Review Queue approval flips this row to 'success' (see `approve_run`).
+
+    The six trailing arguments are optional run-level provenance, mirroring
+    what toolkit.observations records per run. A column is named only when its
+    argument is supplied, so a `source_runs` table without them is unaffected.
+
+    `fetched_at` should be the provider's own vintage (an HTTP Last-Modified,
+    say), not "now" -- it is what lets a backfilled historical run keep its
+    real date instead of the migration's, and what makes a later revision
+    correctly supersede an earlier one.
     """
+    supplied = {
+        "script": script,
+        "source_name": source_name,
+        "source_url": source_url,
+        "source_vintage": source_vintage,
+        "fetched_at": fetched_at,
+        "content_hash": content_hash,
+    }
+    extra = [name for name in OPTIONAL_RUN_COLUMNS if supplied[name] is not None]
+
+    columns = ["source_key", "status", "row_count", "review_artifact", "notes"] + extra
+    values = [
+        source_key,
+        status,
+        row_count,
+        psycopg2.extras.Json(review_artifact) if review_artifact else None,
+        notes,
+        *(supplied[name] for name in extra),
+    ]
+    placeholders = ", ".join(["%s"] * len(columns))
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO source_runs (source_key, status, row_count, review_artifact, notes)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING run_id
-            """,
-            (
-                source_key,
-                status,
-                row_count,
-                psycopg2.extras.Json(review_artifact) if review_artifact else None,
-                notes,
-            ),
+            f"INSERT INTO source_runs ({', '.join(columns)}) "
+            f"VALUES ({placeholders}) RETURNING run_id",
+            values,
         )
         run_id = cur.fetchone()[0]
     conn.commit()
@@ -122,6 +186,14 @@ def finish_run(conn, run_id: int, *, row_count: int | None = None) -> None:
     conn.commit()
 
 
+def _adapt(column: str, value):
+    """psycopg2 needs a dict destined for JSONB wrapped; everything else passes
+    through. Kept separate so adding a future adapted column is one line."""
+    if column in JSON_COLUMNS and value is not None:
+        return psycopg2.extras.Json(value)
+    return value
+
+
 def append(
     conn,
     source_key: str,
@@ -135,6 +207,23 @@ def append(
     Never rewrites existing rows -- a revision is a new row from a new run_id,
     exactly like toolkit.observations.append()'s NDJSON ledger.
     """
+    observations = list(observations)
+    if not observations:
+        return 0
+
+    # A column from OPTIONAL_COLUMNS is named only when some observation in
+    # this batch actually sets it. That is what lets one store module serve
+    # both an `indicators` table that has these columns (901education) and one
+    # that does not (901economy's live table): a batch setting none of them
+    # emits byte-for-byte the statement this function has always emitted.
+    # Setting one against a table lacking the column is a hard error, which is
+    # the correct outcome -- the value has nowhere to go.
+    extra = [name for name in OPTIONAL_COLUMNS if any(getattr(obs, name) is not None for obs in observations)]
+    columns = [
+        "indicator_id", "geography_id", "period", "value", "demographic_group",
+        "source_key", "source_url", "vintage", "tier", "suppressed", "run_id",
+    ] + extra
+
     rows = [
         (
             obs.indicator_id,
@@ -148,20 +237,14 @@ def append(
             tier,
             obs.suppressed,
             run_id,
+            *(_adapt(name, getattr(obs, name)) for name in extra),
         )
         for obs in observations
     ]
-    if not rows:
-        return 0
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(
             cur,
-            """
-            INSERT INTO indicators
-                (indicator_id, geography_id, period, value, demographic_group,
-                 source_key, source_url, vintage, tier, suppressed, run_id)
-            VALUES %s
-            """,
+            f"INSERT INTO indicators ({', '.join(columns)}) VALUES %s",
             rows,
         )
     conn.commit()
