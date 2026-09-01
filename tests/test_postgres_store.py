@@ -260,3 +260,127 @@ def test_approvals_are_append_only(conn):
         cur.execute("SELECT decision FROM approvals WHERE run_id = %s ORDER BY approval_id", (run_id,))
         decisions = [row[0] for row in cur.fetchall()]
     assert decisions == ["approved", "revoked"], "both decisions must coexist, neither overwritten"
+
+
+# --- Optional finer grain (subject/grade/unit/row_key) -------------------------
+#
+# These four columns exist in 901education's `indicators` table and NOT in
+# 901economy's. The pair of tests below is the actual contract: a batch that
+# sets none of them must still work against a table that lacks them (economy,
+# unchanged), and a batch that sets them must round-trip against a table that
+# has them (education).
+
+# `indicators_current` is defined as `SELECT DISTINCT ON (...) i.*`, and a view
+# resolves `*` to a fixed column list when it is CREATEd -- adding a column to
+# `indicators` afterwards does NOT appear in the view. So this fixture drops and
+# recreates the view around the ALTER rather than only altering the table.
+# 901education's real db/schema.sql creates the table with all columns before
+# the view, so it never hits this; a later ALTER on the deployed database would.
+WIDE_COLUMNS = """
+DROP VIEW IF EXISTS indicators_current;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS grade   TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS unit    TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS row_key TEXT;
+"""
+
+NARROW_AGAIN = """
+DROP VIEW IF EXISTS indicators_current;
+ALTER TABLE indicators
+    DROP COLUMN IF EXISTS subject, DROP COLUMN IF EXISTS grade,
+    DROP COLUMN IF EXISTS unit,    DROP COLUMN IF EXISTS row_key;
+"""
+
+# The view text, reused to rebuild it on both sides of the column change.
+VIEW_SQL = SCHEMA[SCHEMA.index("CREATE OR REPLACE VIEW indicators_current"):]
+
+
+@pytest.fixture()
+def wide_conn(conn):
+    """`conn`, with the four optional columns added -- 901education's shape."""
+    with conn.cursor() as cur:
+        cur.execute(WIDE_COLUMNS)
+        cur.execute(VIEW_SQL)
+    conn.commit()
+    yield conn
+    with conn.cursor() as cur:
+        cur.execute(NARROW_AGAIN)
+        cur.execute(VIEW_SQL)
+    conn.commit()
+
+
+def test_legacy_table_without_optional_columns_still_accepts_appends(conn):
+    """901economy's live table has none of the four columns. Setting none of
+    them must emit SQL that never names them, or economy breaks on upgrade."""
+    _seed(conn)
+    run_id = record_run(conn, source_key="fred-mphna")
+    n = append(conn, "fred-mphna", run_id, tier="T1", observations=[
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2026-06", value=665800.0, vintage="FRED fixture"),
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2026-07", value=666200.0, vintage="FRED fixture"),
+    ])
+    assert n == 2
+    assert len(latest(conn, "total-nonfarm-employment", geography_id="memphis-msa")) == 2
+
+
+def test_optional_columns_round_trip_when_the_table_has_them(wide_conn):
+    _seed(wide_conn)
+    run_id = record_run(wide_conn, source_key="fred-mphna")
+    append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2018-19", value=20.6, vintage="TDOE fixture",
+                    subject="ela", grade="all-grades", unit="%",
+                    row_key="tdoe-academic-outcomes|2018-19|proficiency"),
+    ])
+    rows = latest(wide_conn, "total-nonfarm-employment", geography_id="memphis-msa")
+    assert len(rows) == 1
+    assert rows[0]["subject"] == "ela"
+    assert rows[0]["grade"] == "all-grades"
+    assert rows[0]["unit"] == "%"
+    assert rows[0]["row_key"] == "tdoe-academic-outcomes|2018-19|proficiency"
+
+
+def test_partially_set_optional_columns_leave_the_others_null(wide_conn):
+    """A batch setting only row_key must not fail for want of subject/grade."""
+    _seed(wide_conn)
+    run_id = record_run(wide_conn, source_key="fred-mphna")
+    append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2024-25", value=1234.0, vintage="TDOE fixture",
+                    row_key="tdoe-district-snapshot|2024-25|enrollment"),
+    ])
+    row = latest(wide_conn, "total-nonfarm-employment", geography_id="memphis-msa")[0]
+    assert row["row_key"] == "tdoe-district-snapshot|2024-25|enrollment"
+    assert row["subject"] is None and row["grade"] is None and row["unit"] is None
+
+
+def test_mixed_batch_writes_null_for_observations_that_omit_a_set_column(wide_conn):
+    """Education's real ledger mixes rows that carry `subject` with rows that
+    do not (enrollment has none, assessment does). Both land in one append."""
+    _seed(wide_conn)
+    run_id = record_run(wide_conn, source_key="fred-mphna")
+    append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2018-19", value=20.6, vintage="fixture",
+                    subject="ela", row_key="with-subject"),
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2019-20", value=1234.0, vintage="fixture",
+                    row_key="without-subject"),
+    ])
+    by_key = {r["row_key"]: r for r in latest(conn=wide_conn, indicator_id="total-nonfarm-employment")}
+    assert by_key["with-subject"]["subject"] == "ela"
+    assert by_key["without-subject"]["subject"] is None
+
+
+def test_setting_an_optional_column_against_a_legacy_table_is_a_hard_error(conn):
+    """The value has nowhere to go, so failing loudly is the correct outcome --
+    not silently dropping the column."""
+    _seed(conn)
+    run_id = record_run(conn, source_key="fred-mphna")
+    with pytest.raises(psycopg2.errors.UndefinedColumn):
+        append(conn, "fred-mphna", run_id, tier="T1", observations=[
+            Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                        period="2026-06", value=1.0, vintage="fixture", row_key="nowhere"),
+        ])
+    conn.rollback()

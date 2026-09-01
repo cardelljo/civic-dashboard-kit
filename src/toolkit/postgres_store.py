@@ -60,10 +60,13 @@ class Observation:
 
     `suppressed=True` means the source withheld the cell -- `value` must be
     None in that case, never a guess. Mirrors toolkit.observations.Observation;
-    field names differ to match db/schema.sql's `indicators` table
-    (`indicator_id` not `metric_id`, `demographic_group` not `student_group`,
-    no subject/grade -- 901economy encodes those dimensions in the
-    `indicator_id` slug itself, e.g. 'employment-tdl', per PLAN.md §3).
+    the field *names* differ to match a dashboard's `indicators` table
+    (`indicator_id` not `metric_id`, `demographic_group` not `student_group`).
+
+    The last four fields are optional and default to None. 901economy sets
+    none of them -- it encodes those dimensions in the `indicator_id` slug
+    itself, e.g. 'employment-tdl' (PLAN.md §3) -- while 901education carries
+    them as real columns because its build step queries `row_key` directly.
     """
 
     indicator_id: str
@@ -74,6 +77,21 @@ class Observation:
     demographic_group: str = "all"
     source_url: str | None = None
     suppressed: bool = False
+    # Optional finer grain, added for 901education (the second consumer). A
+    # dashboard whose `indicators` table lacks these columns is unaffected:
+    # `append()` only names a column when some observation in the batch sets
+    # it, so a batch that leaves all four None emits exactly the SQL it always
+    # did. 901economy encodes these dimensions in the `indicator_id` slug
+    # instead and sets none of them.
+    subject: str | None = None
+    grade: str | None = None
+    unit: str | None = None
+    row_key: str | None = None
+
+
+# The Observation fields that map to `indicators` columns a consuming schema may
+# or may not define. Order is the column order used in INSERTs; keep it stable.
+OPTIONAL_COLUMNS = ("subject", "grade", "unit", "row_key")
 
 
 def record_run(
@@ -135,6 +153,23 @@ def append(
     Never rewrites existing rows -- a revision is a new row from a new run_id,
     exactly like toolkit.observations.append()'s NDJSON ledger.
     """
+    observations = list(observations)
+    if not observations:
+        return 0
+
+    # A column from OPTIONAL_COLUMNS is named only when some observation in
+    # this batch actually sets it. That is what lets one store module serve
+    # both an `indicators` table that has these columns (901education) and one
+    # that does not (901economy's live table): a batch setting none of them
+    # emits byte-for-byte the statement this function has always emitted.
+    # Setting one against a table lacking the column is a hard error, which is
+    # the correct outcome -- the value has nowhere to go.
+    extra = [name for name in OPTIONAL_COLUMNS if any(getattr(obs, name) is not None for obs in observations)]
+    columns = [
+        "indicator_id", "geography_id", "period", "value", "demographic_group",
+        "source_key", "source_url", "vintage", "tier", "suppressed", "run_id",
+    ] + extra
+
     rows = [
         (
             obs.indicator_id,
@@ -148,20 +183,14 @@ def append(
             tier,
             obs.suppressed,
             run_id,
+            *(getattr(obs, name) for name in extra),
         )
         for obs in observations
     ]
-    if not rows:
-        return 0
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(
             cur,
-            """
-            INSERT INTO indicators
-                (indicator_id, geography_id, period, value, demographic_group,
-                 source_key, source_url, vintage, tier, suppressed, run_id)
-            VALUES %s
-            """,
+            f"INSERT INTO indicators ({', '.join(columns)}) VALUES %s",
             rows,
         )
     conn.commit()

@@ -8,6 +8,22 @@ able to tell at a glance whether a release concerns it.
 
 ### Added — Python half
 
+- `postgres_store.Observation` gained four optional, nullable fields — `subject`,
+  `grade`, `unit`, `row_key` — so one store module can serve a dashboard whose
+  observation grain is finer than 901economy's. 901education needs them: all
+  56,274 rows of its NDJSON ledger set `row_key`, and its `build_data_files.py`
+  queries the column directly.
+  - `append()` names a column only when some observation in the batch sets it,
+    so a batch setting none of them emits exactly the statement it always did.
+    901economy's live `indicators` table, which has none of these columns, keeps
+    working with no `ALTER TABLE` and no change at its call sites.
+  - Setting one against a table that lacks the column raises `UndefinedColumn`
+    rather than silently dropping the value.
+  - Note for anyone adding these columns to an existing database: `indicators_current`
+    is `SELECT DISTINCT ON (...) i.*`, and a view fixes its column list at
+    CREATE time — an `ALTER TABLE` alone will not surface them, the view has to
+    be recreated. Found while writing the tests.
+
 - `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
   `source_line()`, `audit_all()`), promoted from 901justice's
   `scripts/publication/eligibility.py`. Unlike the original, the file-loading

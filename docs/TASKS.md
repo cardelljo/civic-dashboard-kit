@@ -65,13 +65,22 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
   `parse_jail_pdf.py`) — a live gap per 901economy's own tracker (daily AI extraction
   auto-commits with no review today). **Not actionable yet** — gated on 901economy's
   own T3/LangExtract integration landing first (economy's Phase C, still open).
-- 901education: Postgres migration — decided direction (confirmed 2026-08-23), not
-  started. Tracked in 901education's own `docs/TASKS.md`, not duplicated here;
+- 901education: Postgres migration — **in progress, started 2026-09-01.** Tracked in
+  901education's own `docs/TASKS.md`, not duplicated here;
   `docs/prompts/store-migration-planning.md` is the planning prompt for it and for
-  901justice's net-new build. **Do not plan education's NDJSON-history-backfill
-  question without the user** — it's a data-integrity call (does losing the ledger's
-  history silently break the append-only promise this project makes to readers), not
-  a coding decision.
+  901justice's net-new build. The history question that gated planning is **answered
+  by the user (2026-09-01): backfill the full ledger** — all 56,274 observations and
+  22 `source_runs`, preserving each run's original `fetched_at` rather than stamping
+  the migration date. Collapsing to current values or starting fresh were both
+  rejected as breaking the append-only promise.
+  - This repo's side of it: `postgres_store.Observation` gained optional
+    `subject`/`grade`/`unit`/`row_key` so education's finer grain fits one shared
+    store module (see `CHANGELOG.md`). Education is the second real consumer, so
+    rule-of-three is met. Its dedup policy (`observations_utils.record_run_deduped`)
+    stays in education — one dashboard's rule, not toolkit code.
+  - Still open here: `record_run()` needs the run-level provenance education's
+    ledger carries (`script`, `source_name`, `source_url`, `source_vintage`,
+    `fetched_at`, `content_hash`), same optional-column treatment.
 - 901justice: same migration planning prompt, net-new Postgres build (no existing
   store module to migrate). Unlike education, no history question blocks it — this
   half is ready to delegate for planning today.
