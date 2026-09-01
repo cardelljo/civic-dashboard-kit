@@ -63,10 +63,17 @@ class Observation:
     the field *names* differ to match a dashboard's `indicators` table
     (`indicator_id` not `metric_id`, `demographic_group` not `student_group`).
 
-    The last four fields are optional and default to None. 901economy sets
-    none of them -- it encodes those dimensions in the `indicator_id` slug
-    itself, e.g. 'employment-tdl' (PLAN.md §3) -- while 901education carries
-    them as real columns because its build step queries `row_key` directly.
+    The last three fields are optional and default to None. 901economy sets
+    none of them; 901education sets `unit`, `row_key` and `dimensions`.
+
+    `dimensions` is deliberately an open dict rather than named columns. A
+    dashboard's extra axes are its own vocabulary -- education has grade bands,
+    justice has offense types and dispositions -- and naming them here would
+    grow this dataclass into the union of every domain's terminology, which is
+    the opposite of what a shared store is for. Anything a dashboard can derive
+    from `indicator_id` does not belong here at all: education's `subject` was
+    dropped on exactly that basis, being uniquely determined by the id
+    ('ela-proficiency' is always subject 'ela').
     """
 
     indicator_id: str
@@ -77,21 +84,25 @@ class Observation:
     demographic_group: str = "all"
     source_url: str | None = None
     suppressed: bool = False
-    # Optional finer grain, added for 901education (the second consumer). A
-    # dashboard whose `indicators` table lacks these columns is unaffected:
-    # `append()` only names a column when some observation in the batch sets
-    # it, so a batch that leaves all four None emits exactly the SQL it always
-    # did. 901economy encodes these dimensions in the `indicator_id` slug
-    # instead and sets none of them.
-    subject: str | None = None
-    grade: str | None = None
+    # Optional finer grain. A dashboard whose `indicators` table lacks these
+    # columns is unaffected: `append()` only names a column when some
+    # observation in the batch sets it, so a batch leaving all three None emits
+    # exactly the SQL it always did. 901economy sets none of them.
     unit: str | None = None
+    # A stable per-cell identifier from the writing pipeline, when it has one.
+    # Opaque to this module; education's build step looks rows up by it.
     row_key: str | None = None
+    # Dashboard-specific axes, stored as JSONB. Keys are the dashboard's own,
+    # not this module's -- see the class docstring for why they are not columns.
+    dimensions: dict | None = None
 
 
 # The Observation fields that map to `indicators` columns a consuming schema may
 # or may not define. Order is the column order used in INSERTs; keep it stable.
-OPTIONAL_COLUMNS = ("subject", "grade", "unit", "row_key")
+OPTIONAL_COLUMNS = ("unit", "row_key", "dimensions")
+
+# Optional columns needing an adapter rather than being passed through as-is.
+JSON_COLUMNS = frozenset({"dimensions"})
 
 
 # Run-level provenance columns a consuming `source_runs` table may or may not
@@ -175,6 +186,14 @@ def finish_run(conn, run_id: int, *, row_count: int | None = None) -> None:
     conn.commit()
 
 
+def _adapt(column: str, value):
+    """psycopg2 needs a dict destined for JSONB wrapped; everything else passes
+    through. Kept separate so adding a future adapted column is one line."""
+    if column in JSON_COLUMNS and value is not None:
+        return psycopg2.extras.Json(value)
+    return value
+
+
 def append(
     conn,
     source_key: str,
@@ -218,7 +237,7 @@ def append(
             tier,
             obs.suppressed,
             run_id,
-            *(getattr(obs, name) for name in extra),
+            *(_adapt(name, getattr(obs, name)) for name in extra),
         )
         for obs in observations
     ]

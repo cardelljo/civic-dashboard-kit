@@ -74,10 +74,20 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
   the migration date. Collapsing to current values or starting fresh were both
   rejected as breaking the append-only promise.
   - This repo's side of it: `postgres_store.Observation` gained optional
-    `subject`/`grade`/`unit`/`row_key` so education's finer grain fits one shared
-    store module (see `CHANGELOG.md`). Education is the second real consumer, so
-    rule-of-three is met. Its dedup policy (`observations_utils.record_run_deduped`)
-    stays in education — one dashboard's rule, not toolkit code.
+    `unit`/`row_key`/`dimensions` so education's finer grain fits one shared
+    store module (see `CHANGELOG.md`). Its dedup policy
+    (`observations_utils.record_run_deduped`) stays in education — one
+    dashboard's rule, not toolkit code.
+  - **Design correction worth remembering.** The first draft added `subject` and
+    `grade` as named columns, justified on rule-of-three. That justification did
+    not hold: rule-of-three covers *finer grain as a concept* (education is the
+    second consumer of that), but education is the ONLY consumer of `subject`
+    and `grade`, so by this repo's own rule those did not belong here. Left
+    alone, `indicators` would accrete the union of three domains' vocabularies.
+    Replaced with an open `dimensions` JSONB. `subject` was dropped entirely —
+    checked against all 56,274 rows, it is uniquely determined by `indicator_id`
+    and carries no information. The general rule: **anything derivable from the
+    indicator id is not an observation field.**
   - `record_run()` likewise gained those six run-level provenance arguments,
     with `fetched_at` kept distinct from `started_at` so a backfilled run keeps
     its real date. Both halves of this repo's side are done; what remains is in

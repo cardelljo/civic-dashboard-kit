@@ -285,17 +285,16 @@ def test_approvals_are_append_only(conn):
 # the view, so it never hits this; a later ALTER on the deployed database would.
 WIDE_COLUMNS = """
 DROP VIEW IF EXISTS indicators_current;
-ALTER TABLE indicators ADD COLUMN IF NOT EXISTS subject TEXT;
-ALTER TABLE indicators ADD COLUMN IF NOT EXISTS grade   TEXT;
-ALTER TABLE indicators ADD COLUMN IF NOT EXISTS unit    TEXT;
-ALTER TABLE indicators ADD COLUMN IF NOT EXISTS row_key TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS unit       TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS row_key    TEXT;
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS dimensions JSONB;
 """
 
 NARROW_AGAIN = """
 DROP VIEW IF EXISTS indicators_current;
 ALTER TABLE indicators
-    DROP COLUMN IF EXISTS subject, DROP COLUMN IF EXISTS grade,
-    DROP COLUMN IF EXISTS unit,    DROP COLUMN IF EXISTS row_key;
+    DROP COLUMN IF EXISTS unit, DROP COLUMN IF EXISTS row_key,
+    DROP COLUMN IF EXISTS dimensions;
 """
 
 # The view text, reused to rebuild it on both sides of the column change.
@@ -337,20 +336,34 @@ def test_optional_columns_round_trip_when_the_table_has_them(wide_conn):
     run_id = record_run(wide_conn, source_key="fred-mphna")
     append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
         Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
-                    period="2018-19", value=20.6, vintage="TDOE fixture",
-                    subject="ela", grade="all-grades", unit="%",
-                    row_key="tdoe-academic-outcomes|2018-19|proficiency"),
+                    period="2018-19", value=20.6, vintage="TDOE fixture", unit="%",
+                    row_key="tdoe-academic-outcomes|2018-19|proficiency",
+                    dimensions={"grade": "all-grades"}),
     ])
     rows = latest(wide_conn, "total-nonfarm-employment", geography_id="memphis-msa")
     assert len(rows) == 1
-    assert rows[0]["subject"] == "ela"
-    assert rows[0]["grade"] == "all-grades"
     assert rows[0]["unit"] == "%"
     assert rows[0]["row_key"] == "tdoe-academic-outcomes|2018-19|proficiency"
+    # Comes back as a dict, not a JSON string -- psycopg2 decodes JSONB natively.
+    assert rows[0]["dimensions"] == {"grade": "all-grades"}
+
+
+def test_dimensions_keys_are_the_dashboards_own_not_this_modules(wide_conn):
+    """The whole point of an open dict: a domain this module has never heard of
+    stores its axes without the toolkit learning that vocabulary."""
+    _seed(wide_conn)
+    run_id = record_run(wide_conn, source_key="fred-mphna")
+    append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
+        Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
+                    period="2024", value=1.0, vintage="fixture",
+                    dimensions={"offense_type": "burglary", "disposition": "dismissed"}),
+    ])
+    row = latest(wide_conn, "total-nonfarm-employment", geography_id="memphis-msa")[0]
+    assert row["dimensions"] == {"offense_type": "burglary", "disposition": "dismissed"}
 
 
 def test_partially_set_optional_columns_leave_the_others_null(wide_conn):
-    """A batch setting only row_key must not fail for want of subject/grade."""
+    """A batch setting only row_key must not fail for want of unit/dimensions."""
     _seed(wide_conn)
     run_id = record_run(wide_conn, source_key="fred-mphna")
     append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
@@ -360,25 +373,26 @@ def test_partially_set_optional_columns_leave_the_others_null(wide_conn):
     ])
     row = latest(wide_conn, "total-nonfarm-employment", geography_id="memphis-msa")[0]
     assert row["row_key"] == "tdoe-district-snapshot|2024-25|enrollment"
-    assert row["subject"] is None and row["grade"] is None and row["unit"] is None
+    assert row["unit"] is None and row["dimensions"] is None
 
 
 def test_mixed_batch_writes_null_for_observations_that_omit_a_set_column(wide_conn):
-    """Education's real ledger mixes rows that carry `subject` with rows that
-    do not (enrollment has none, assessment does). Both land in one append."""
+    """Education's real ledger mixes rows carrying a grade band with rows that
+    have none (only 2 of its 26 metrics vary on grade). Both land in one
+    append, and the ones without must not acquire an empty dict."""
     _seed(wide_conn)
     run_id = record_run(wide_conn, source_key="fred-mphna")
     append(wide_conn, "fred-mphna", run_id, tier="T1", observations=[
         Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
                     period="2018-19", value=20.6, vintage="fixture",
-                    subject="ela", row_key="with-subject"),
+                    dimensions={"grade": "3"}, row_key="with-dimensions"),
         Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
                     period="2019-20", value=1234.0, vintage="fixture",
-                    row_key="without-subject"),
+                    row_key="without-dimensions"),
     ])
     by_key = {r["row_key"]: r for r in latest(conn=wide_conn, indicator_id="total-nonfarm-employment")}
-    assert by_key["with-subject"]["subject"] == "ela"
-    assert by_key["without-subject"]["subject"] is None
+    assert by_key["with-dimensions"]["dimensions"] == {"grade": "3"}
+    assert by_key["without-dimensions"]["dimensions"] is None
 
 
 def test_setting_an_optional_column_against_a_legacy_table_is_a_hard_error(conn):
