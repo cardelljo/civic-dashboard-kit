@@ -92,6 +92,13 @@ def conn():
         cur.execute(SCHEMA)
     connection.commit()
     yield connection
+    # Roll back first: a test that deliberately provokes a database error (the
+    # UndefinedColumn cases below) leaves the transaction aborted, and every
+    # statement in this teardown -- including the TRUNCATE -- would then be
+    # ignored, leaking rows and columns into the *next* run rather than this
+    # one. That failure looks like an unrelated UniqueViolation later, so it is
+    # worth the one line.
+    connection.rollback()
     # Truncate rather than drop -- keeps the schema in place for the next test,
     # matching how a real deployment never drops these tables either.
     with connection.cursor() as cur:
@@ -303,6 +310,7 @@ def wide_conn(conn):
         cur.execute(VIEW_SQL)
     conn.commit()
     yield conn
+    conn.rollback()
     with conn.cursor() as cur:
         cur.execute(NARROW_AGAIN)
         cur.execute(VIEW_SQL)
@@ -383,4 +391,97 @@ def test_setting_an_optional_column_against_a_legacy_table_is_a_hard_error(conn)
             Observation(indicator_id="total-nonfarm-employment", geography_id="memphis-msa",
                         period="2026-06", value=1.0, vintage="fixture", row_key="nowhere"),
         ])
+    conn.rollback()
+
+
+# --- Optional run-level provenance --------------------------------------------
+#
+# 901education's NDJSON ledger records six fields per run that 901economy's
+# `source_runs` table has no columns for. Same contract as the observation
+# columns above: named only when supplied.
+
+WIDE_RUN_COLUMNS = """
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS script         TEXT;
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS source_name    TEXT;
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS source_url     TEXT;
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS source_vintage TEXT;
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS fetched_at     TIMESTAMPTZ;
+ALTER TABLE source_runs ADD COLUMN IF NOT EXISTS content_hash   TEXT;
+"""
+
+
+@pytest.fixture()
+def run_conn(conn):
+    """`conn`, with the six optional run-provenance columns -- education's shape."""
+    with conn.cursor() as cur:
+        cur.execute(WIDE_RUN_COLUMNS)
+    conn.commit()
+    yield conn
+    conn.rollback()
+    with conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE source_runs "
+            "DROP COLUMN IF EXISTS script, DROP COLUMN IF EXISTS source_name, "
+            "DROP COLUMN IF EXISTS source_url, DROP COLUMN IF EXISTS source_vintage, "
+            "DROP COLUMN IF EXISTS fetched_at, DROP COLUMN IF EXISTS content_hash"
+        )
+    conn.commit()
+
+
+def _run_row(conn, run_id):
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM source_runs WHERE run_id = %s", (run_id,))
+        return dict(cur.fetchone())
+
+
+def test_record_run_without_provenance_works_on_a_legacy_source_runs_table(conn):
+    """901economy calls record_run with none of the six. Must not name them."""
+    _seed(conn)
+    run_id = record_run(conn, source_key="fred-mphna")
+    assert _run_row(conn, run_id)["status"] == "success"
+
+
+def test_record_run_stores_provenance_when_the_table_has_the_columns(run_conn):
+    _seed(run_conn)
+    run_id = record_run(
+        run_conn,
+        source_key="fred-mphna",
+        script="scripts/fetch_tdoe_assessment.py",
+        source_name="TDOE TCAP Assessment Files",
+        source_url="https://example.invalid/district_assessment_file.xlsx",
+        source_vintage="2025-26",
+        fetched_at="2026-06-24T21:33:49+00:00",
+        content_hash="a" * 64,
+    )
+    row = _run_row(run_conn, run_id)
+    assert row["script"] == "scripts/fetch_tdoe_assessment.py"
+    assert row["source_vintage"] == "2025-26"
+    assert row["content_hash"] == "a" * 64
+    # The whole point of accepting fetched_at: a backfilled historical run keeps
+    # its real date rather than the migration's.
+    assert row["fetched_at"].year == 2026 and row["fetched_at"].month == 6
+
+
+def test_fetched_at_is_independent_of_started_at(run_conn):
+    """`started_at` defaults to now(); a backfilled run's `fetched_at` is older.
+    If these were conflated, backfilling would silently restamp history."""
+    _seed(run_conn)
+    run_id = record_run(run_conn, source_key="fred-mphna",
+                        fetched_at="2025-09-05T16:44:10+00:00")
+    row = _run_row(run_conn, run_id)
+    assert row["fetched_at"] < row["started_at"]
+
+
+def test_partial_provenance_leaves_the_rest_null(run_conn):
+    _seed(run_conn)
+    run_id = record_run(run_conn, source_key="fred-mphna", content_hash="b" * 64)
+    row = _run_row(run_conn, run_id)
+    assert row["content_hash"] == "b" * 64
+    assert row["script"] is None and row["source_vintage"] is None
+
+
+def test_provenance_against_a_legacy_table_is_a_hard_error(conn):
+    _seed(conn)
+    with pytest.raises(psycopg2.errors.UndefinedColumn):
+        record_run(conn, source_key="fred-mphna", script="scripts/nowhere.py")
     conn.rollback()

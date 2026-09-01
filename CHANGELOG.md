@@ -24,6 +24,18 @@ able to tell at a glance whether a release concerns it.
     CREATE time — an `ALTER TABLE` alone will not surface them, the view has to
     be recreated. Found while writing the tests.
 
+- `postgres_store.record_run()` gained six optional run-level provenance arguments —
+  `script`, `source_name`, `source_url`, `source_vintage`, `fetched_at`,
+  `content_hash` — mirroring what `observations.record_run()` records per run.
+  Same contract as above: a column is named only when its argument is supplied,
+  so a `source_runs` table without them is untouched.
+  - `fetched_at` is deliberately separate from `started_at` (which defaults to
+    `now()`). A backfilled historical run keeps the provider's real date instead
+    of the migration's; conflating the two would silently restamp history.
+  - The dedup *policy* built on `content_hash` stays in 901education
+    (`scripts/observations_utils.py`) — that is one dashboard's rule about when
+    an unchanged re-fetch should skip its append, not toolkit behaviour.
+
 - `eligibility.py`: publication eligibility gate (`is_publishable()`, `load_meta()`,
   `source_line()`, `audit_all()`), promoted from 901justice's
   `scripts/publication/eligibility.py`. Unlike the original, the file-loading

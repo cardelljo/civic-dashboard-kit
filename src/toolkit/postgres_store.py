@@ -94,6 +94,15 @@ class Observation:
 OPTIONAL_COLUMNS = ("subject", "grade", "unit", "row_key")
 
 
+# Run-level provenance columns a consuming `source_runs` table may or may not
+# define, in INSERT order. Same optional-column contract as OPTIONAL_COLUMNS:
+# named only when the caller supplies a value. 901economy's table has none of
+# them; 901education's ledger records all six per run.
+OPTIONAL_RUN_COLUMNS = (
+    "script", "source_name", "source_url", "source_vintage", "fetched_at", "content_hash",
+)
+
+
 def record_run(
     conn,
     *,
@@ -102,27 +111,53 @@ def record_run(
     row_count: int | None = None,
     review_artifact: dict | None = None,
     notes: str | None = None,
+    script: str | None = None,
+    source_name: str | None = None,
+    source_url: str | None = None,
+    source_vintage: str | None = None,
+    fetched_at: str | None = None,
+    content_hash: str | None = None,
 ) -> int:
     """Insert a source_runs row and return its run_id.
 
     `status='pending_review'` for a T3 extraction -- `append()` still attaches
     its rows to this run_id, but `indicators_current` won't surface them until
     a Review Queue approval flips this row to 'success' (see `approve_run`).
+
+    The six trailing arguments are optional run-level provenance, mirroring
+    what toolkit.observations records per run. A column is named only when its
+    argument is supplied, so a `source_runs` table without them is unaffected.
+
+    `fetched_at` should be the provider's own vintage (an HTTP Last-Modified,
+    say), not "now" -- it is what lets a backfilled historical run keep its
+    real date instead of the migration's, and what makes a later revision
+    correctly supersede an earlier one.
     """
+    supplied = {
+        "script": script,
+        "source_name": source_name,
+        "source_url": source_url,
+        "source_vintage": source_vintage,
+        "fetched_at": fetched_at,
+        "content_hash": content_hash,
+    }
+    extra = [name for name in OPTIONAL_RUN_COLUMNS if supplied[name] is not None]
+
+    columns = ["source_key", "status", "row_count", "review_artifact", "notes"] + extra
+    values = [
+        source_key,
+        status,
+        row_count,
+        psycopg2.extras.Json(review_artifact) if review_artifact else None,
+        notes,
+        *(supplied[name] for name in extra),
+    ]
+    placeholders = ", ".join(["%s"] * len(columns))
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO source_runs (source_key, status, row_count, review_artifact, notes)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING run_id
-            """,
-            (
-                source_key,
-                status,
-                row_count,
-                psycopg2.extras.Json(review_artifact) if review_artifact else None,
-                notes,
-            ),
+            f"INSERT INTO source_runs ({', '.join(columns)}) "
+            f"VALUES ({placeholders}) RETURNING run_id",
+            values,
         )
         run_id = cur.fetchone()[0]
     conn.commit()

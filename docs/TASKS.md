@@ -78,9 +78,10 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
     store module (see `CHANGELOG.md`). Education is the second real consumer, so
     rule-of-three is met. Its dedup policy (`observations_utils.record_run_deduped`)
     stays in education — one dashboard's rule, not toolkit code.
-  - Still open here: `record_run()` needs the run-level provenance education's
-    ledger carries (`script`, `source_name`, `source_url`, `source_vintage`,
-    `fetched_at`, `content_hash`), same optional-column treatment.
+  - `record_run()` likewise gained those six run-level provenance arguments,
+    with `fetched_at` kept distinct from `started_at` so a backfilled run keeps
+    its real date. Both halves of this repo's side are done; what remains is in
+    901education.
 - 901justice: same migration planning prompt, net-new Postgres build (no existing
   store module to migrate). Unlike education, no history question blocks it — this
   half is ready to delegate for planning today.
