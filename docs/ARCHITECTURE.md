@@ -105,25 +105,70 @@ frontend queries Postgres." It does not.
 Also unchanged: the append-only discipline, the `_meta` provenance contract, and
 the human-review gate. Those are store-independent by design.
 
-### Migration is real work, and not yet planned
+### Migration is real work — planned, and under way for education
 
 Two dashboards have to get there, and they are not the same job:
 
-| | Today | What the move requires |
+| | Today | What remains |
 |---|---|---|
 | 901economy | Postgres | done — it is the reference implementation |
-| 901education | NDJSON ledger, ~4 pipelines writing it | a `schema.sql`, per-source `fetch_*.py` rewrites onto `postgres_store`, **and a decision on the existing ledger's history** |
-| 901justice | static JSON, no store module | net-new: schema, store adoption, and its daily cron re-pointed |
+| 901education | **schema + full backfill landed 2026-09-01; pipelines still write NDJSON** | the `fetch_*.py` cutover, on-server execution, CI's Postgres service |
+| 901justice | static JSON, no store module | net-new: schema, store adoption, and its daily cron re-pointed. Not started. |
 
-**The open question on education is history, not code.** Its ledger holds real
-observations. Backfilling them into Postgres preserves the series; starting fresh
-from cutover loses it. That is a data-integrity call, and given the append-only
-promise this project makes to its readers, losing history silently would break it
-— so it needs an explicit answer either way, not a default.
+**The history question is answered: backfill everything.** Decided by the user,
+2026-09-01. All 56,274 observations and all 22 recorded run lines are in Postgres,
+each run keeping its **original `fetched_at`** rather than the migration date — the
+oldest is a real 2023-12-31 ACS vintage. Collapsing to current values and starting
+fresh at cutover were both considered and rejected: this project promises readers an
+append-only record, and losing the series silently would break it.
 
-Tasks for both are not written yet. A planning prompt for that work is in
-[`docs/prompts/store-migration-planning.md`](prompts/store-migration-planning.md);
-its output belongs in each dashboard's own `PLAN.md`, not here.
+Education's own `docs/TASKS.md` holds the ticket and the per-stage detail. Four
+findings from doing it generalise beyond that repo, so they are recorded here:
+
+- **A ledger `run_id` derived from the provider's date is not unique.** Two runs
+  finding a source unchanged share one id (22 lines, 16 ids). The repeats are the
+  dedup wrapper's "ran and confirmed no change" audit trail — collapsing them
+  discards exactly what that feature exists to record.
+- **`observations_current` in `toolkit.observations` dedupes nothing when every
+  row in a run shares its `fetched_at`.** It joins on `observed_at = MAX(...)`, so
+  the tie matches every row. Do not treat that view as a dedup gate.
+- **Supersession must order on the run's `fetched_at`, not on row insert order.**
+  A backfill inserts every run within seconds, so a `retrieved_at` ordering breaks
+  every tie arbitrarily and returns superseded values with no error.
+- **A dashboard whose pipelines publish overlapping cells needs its per-cell id in
+  the view's key.** Education lost 5,358 rows from `indicators_current` without it,
+  silently.
+
+[`docs/prompts/store-migration-planning.md`](prompts/store-migration-planning.md)
+remains the planning prompt for 901justice's half, which is still net-new.
+
+### What belongs in an `Observation`, and what does not — decided 2026-09-01
+
+`postgres_store.Observation` carries `unit`, `row_key`, and an open `dimensions`
+JSONB. It deliberately does **not** carry any dashboard's named axes.
+
+**A dashboard's extra axes are its own vocabulary.** Education has grade bands;
+justice has offense types and dispositions; economy folds its axes into the
+`indicator_id` slug (`employment-tdl`). Naming each domain's axes as columns on the
+shared dataclass would grow it into the union of every domain's terminology, which
+is the opposite of what a shared store is for. An open dict costs a little query
+ergonomics and buys a store that never needs widening for the next dashboard.
+
+An earlier draft of the education change did add `subject` and `grade` as named
+columns, justified on rule-of-three. **That justification did not hold, and the
+failure mode is worth naming:** rule-of-three covered *finer grain as a concept*
+(education being the second consumer of that), but education was the only consumer
+of `subject` and `grade`. Stretching a rule to cover fields it does not cover is how
+shared code accumulates one consumer's vocabulary.
+
+**Anything derivable from `indicator_id` is not an observation field.** `subject`
+was dropped outright rather than moved into `dimensions`: across all 56,274 education
+rows it is uniquely determined by the indicator id (`ela-proficiency` is always
+subject `ela`). The proof it lost nothing is that `indicators_current` returned the
+same 23,505 cells before and after — dropping a derivable field cannot merge two
+cells. Where a dashboard relies on such a property, assert it in code rather than
+assuming it: education's backfill fails outright if a future release ever reuses one
+`metric_id` across two subjects.
 
 ## 1.1 Delivery: volume-generated static pages, dynamic only where it earns it
 
@@ -315,7 +360,7 @@ allowed to.
 
 ```
 economy.indicators, economy.geographies, economy.source_runs, …
-education.…            (only if education outgrows the NDJSON ledger — no forced migration)
+education.…            (adopted 2026-09-01: schema applied, ledger backfilled)
 justice.…              (only if/when justice adopts Postgres — deliberately left a judgment call)
 geo.boundaries         ← shared: municipalities, zips, tracts, council/commission districts
 ```
@@ -329,9 +374,10 @@ migration surface. At three small dashboards on a single host that trades well
 against one backup job and one thing to patch. Schemas are already separate, so
 splitting later is mechanical rather than a rewrite.
 
-**Adoption is opt-in.** A dashboard on the NDJSON ledger is not required to
-migrate. It may still read `geo.boundaries` at build time without moving its
-own indicator storage.
+**Adoption is opt-in in mechanism, not in direction.** §1 settles that all three
+dashboards are heading to Postgres; a dashboard that has not moved yet is simply not
+there yet, and may read `geo.boundaries` at build time without owning any of it.
+Education exercised exactly that path before adopting its own schema.
 
 ## 3. PostGIS: enable it
 
@@ -426,9 +472,9 @@ belongs in `public` but PostGIS's own `spatial_ref_sys`, so a missing
 succeeding.
 
 **Creating a schema is not a migration commitment.** `education` and `justice`
-exist from the first run, but §1 still governs the store choice — education is on
-the NDJSON ledger and justice is a deliberate judgment call. Their namespaces
-exist so either can read `geo.boundaries` at build time without owning any of it,
+exist from the first run, ahead of either owning tables in them. Education has
+since adopted its namespace (§1, 2026-09-01); justice has not started. A namespace
+exists so a dashboard can read `geo.boundaries` at build time without owning any of it,
 and so adopting Postgres later needs no second bootstrap.
 
 **`geo` gets its own role.** `geo_loader` owns the schema; the three app roles get
