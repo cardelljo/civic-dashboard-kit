@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { Copy, Check, ExternalLink, Landmark, Calendar, MapPin } from 'lucide-react';
 import type { StoryboardSlideCivicAction } from './types';
