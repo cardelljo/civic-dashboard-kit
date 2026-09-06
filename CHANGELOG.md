@@ -6,6 +6,19 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Added — TypeScript half
+
+- **Civic Storyboard & Scrollytelling Suite (\`ui/storyboard/\`):** Shared 4-slide interactive data narrative engine inspired by \`decriminalizepoverty.org/present1/\`, consumable by \`901education\`, \`901justice\`, and \`901economy\`.
+  - \`StoryboardPresenter\`: Multi-slide responsive carousel with touch swipe, keyboard navigation (arrow keys), and step indicators.
+  - \`StoryboardModal\`: Pop-up modal wrapper for "Tell the Story Behind This Data" triggers.
+  - Persona Adapter (\`resident\`, \`organizer\`, \`journalist\`, \`policymaker\`): Dynamically switches narrative depth, tone, and policy framing.
+  - Standardized 4-slide arc:
+    1. \`StorySlideHumanContext\`: Lived reality, human scaling, primary KPI hero card, anchor quote.
+    2. \`StorySlideIntersections\`: Cross-domain indicator cards (Education, Justice, Economy, Housing, Health).
+    3. \`StorySlideRootCauses\`: Key systemic drivers and funding mechanisms.
+    4. \`StorySlideCivicAction\`: Target body meeting details, concrete policy asks, and 1-click 3-minute public testimony script copy.
+  - Strict TypeScript interfaces and schemas (\`types.ts\`).
+
 ### Added — Python half
 
 - `postgres_store.Observation` gained three optional, nullable fields — `unit`,

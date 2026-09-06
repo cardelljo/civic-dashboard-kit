@@ -123,6 +123,14 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-09 — Civic Storyboard & Scrollytelling Engine shipped in `ui/storyboard/`
+- `StoryboardPresenter.tsx` and `StoryboardModal.tsx` added to shared UI package.
+- Standardized 4-slide arc (`StorySlideHumanContext`, `StorySlideIntersections`, `StorySlideRootCauses`, `StorySlideCivicAction`).
+- Persona switcher (`resident`, `organizer`, `journalist`, `policymaker`) dynamically adjusts narrative depth and framing.
+- Full keyboard (arrow keys/Escape) and mobile touch swipe navigation support.
+- Vitest suite in `tests/ui/storyboard.test.tsx` (4 tests, all passing alongside data-status/source-line).
+
+
 ### 2026-08-27 — Doc fix: §6.1's zip `ST_IsValid` finding revisited in light of §6.2
 - `docs/ARCHITECTURE.md` §6.1 stated the 2-of-31 self-intersecting zip polygons as a
   flat source-data-quality issue. §6.2 later found the same "nested shells" symptom on
