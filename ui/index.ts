@@ -1,14 +1,10 @@
 /**
- * The TypeScript half of civic-dashboard-kit: the canonical `DataStatus` union
- * and the provenance UI that renders it.
+ * The TypeScript half of civic-dashboard-kit: the canonical `DataStatus` union,
+ * the provenance UI that renders it, and the shared Civic Storyboard Engine.
  *
- * Scope is deliberately narrow — see `docs/ARCHITECTURE.md` §7. Sections,
- * charts, narrative components, branding, and layout shell stay in each
- * dashboard; they are the ~85% that is domain-specific.
- *
- * Nothing exported here fetches anything. Every component takes
- * already-imported JSON as props, because each dashboard is a static export
- * (`output: 'export'`) whose frontend never queries a database or an API.
+ * Scope follows docs/ARCHITECTURE.md §7 and docs/CIVIC_ENGAGEMENT_SUITE.md.
+ * Nothing exported here fetches anything. Every component takes already-imported
+ * JSON or config as props, maintaining static export compatibility.
  */
 
 export type { DataStatus } from './types';
@@ -20,3 +16,6 @@ export type { DataSource } from './DataStatusPanel';
 
 export { default as SourceLine } from './SourceLine';
 export type { SourceLineProps } from './SourceLine';
+
+// Civic Storyboard & Scrollytelling Suite
+export * from './storyboard';
