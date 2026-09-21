@@ -12,20 +12,31 @@ dated entry under "Done" when you finish anything nontrivial.
 ## Next Up
 
 **Container consolidation (`docs/ARCHITECTURE.md` §1.3, decided 2026-09-21) — two
-containers for the series instead of two per dashboard. Sequence 1 then 2. Both should
-land before 901justice's Postgres + admin step, so the review queue gets built once
-rather than per dashboard.**
+containers for the series instead of two per dashboard. Items 1 then 2, in that order;
+both should land before 901justice's Postgres + admin step so the review queue gets
+built once rather than per dashboard. Item 3 runs in parallel — it is a content-model
+question the justice migration raised, not container work, and it is paced by that
+migration rather than by these two.**
+
+**Read `docs/ARCHITECTURE.md` §1.3's "justice is the lens" subsection before promoting
+anything here.** Economy's and education's copies already agree with each other;
+abstracting from that agreement produces a toolkit that fits two repos and fights the
+third, and the third is the most developed dashboard in the series.
 
 1. [ ] **Promote the pipeline dispatcher into the kit as `toolkit.pipeline`, namespaced
    by dashboard.** §1.3's first half: one pipeline container running every dashboard's
    jobs.
 
-   *Why this is not a rule-of-three violation.* The rule governs whether to **share a
-   pattern** across independently deployed consumers — that is what held `KpiCard` and
-   `TrendChart` out in §7.2. §1.3 decides there is exactly **one** pipeline container,
-   so there is no pattern to share: this is consolidating two copies of one service
-   into the single instance of it. Record this reasoning in the PR, because the rule
-   will correctly be raised against it otherwise.
+   *Rule-of-three: satisfied, not exempted.* An earlier draft of this ticket argued an
+   exemption — that §1.3's single container means there is no pattern to share, only
+   two copies of one service to consolidate. That still holds, but it is the weaker
+   argument and it is not needed: **901justice adopting Postgres brings a third
+   consumer**, which satisfies the rule on its own terms. `docs/PROJECT_NOTES.md`'s
+   "Rule-of-three, applied" entry listed `runner.py`/`jobs.py` as reference
+   implementations rather than extraction candidates; it is updated for this.
+   Per §1.3's "justice is the lens" subsection, check the registry design against
+   justice's actual job inventory before landing it — the extraction is justified now,
+   but the *shape* should be answerable to the repo that hasn't been accommodated yet.
 
    *What moves, and what it has to reconcile.* Two drifted copies exist
    (`901economy/pipeline/`, `901education/pipeline/`), and they disagree on real
@@ -83,6 +94,19 @@ rather than per dashboard.**
    §1.1 already flagged and never resolved: whether separate Coolify resources can
    share the volume, or whether the builder has to write to a host bind mount. Confirm
    before building either half.
+
+3. [ ] **Decide how kind-3 "document findings" surfaces are stored** — see
+   `docs/DASHBOARD_SURFACES.md`, which has the measured grounding (justice's 18
+   datasets: 10 trend, 3 finding-shaped), the four-kind surface taxonomy, a schema
+   sketch, and the two open decisions. Raised by the justice migration because
+   `doj_findings.json` and `juvenile_doj_monitor.json` cannot go in `indicators`
+   (`NUMERIC value`, required `period`, and editorial fields with no source). **Blocks
+   nothing in this repo yet** — it gates how justice's `doj-report` and `youth-justice`
+   pages get rebuilt, so it wants deciding alongside the migration rather than after.
+   The two questions: whether kind 3 lives in Postgres at all (D3's PR-gate reasoning
+   may cover it at justice's volume), and whether milestones are their own table. No
+   `ui/` extraction yet — two consumers, per §7.2; the doc says what to diff when the
+   third arrives.
 
 
 **Civic Engagement Suite & AI Story Engine (Parallel Track — see \`docs/CIVIC_ENGAGEMENT_SUITE.md\` for full 5-track WBS):**

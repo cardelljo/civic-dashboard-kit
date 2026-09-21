@@ -477,6 +477,35 @@ the auth mechanism when the queue is built; it does not gate the container shape
   than eight, not more. It is a deliberate trade of isolation for a setup cost
   measured in a config file instead of a repo.
 
+### Sequencing the abstraction: 901justice is the lens, not the last consumer
+
+**Recorded 2026-09-21.** §1.3 says consolidate. It does not say *what* to promote out
+of the two existing copies, and the order that gets chosen matters more than it looks.
+
+The tempting reading of the drift table above is that education's copy is the mature
+one — it grew `logging` and an `argparse` CLI, and its `get_job_command()` generalizes
+over repo layout where economy's hardcoded `-m pipeline.<job>` does not. Economy
+started on Postgres, education moved second and learned from it, so education's code is
+better. Promote education's.
+
+**That is the wrong selection criterion.** Education's is the better of two
+implementations of *economy's and education's* requirements. The dashboard that has not
+been accommodated by either is 901justice — and it is the one with the widest surface:
+point values, trend series, **and** finding records that the shared schema has no place
+for (`docs/DASHBOARD_SURFACES.md`, measured against its 18 datasets).
+
+So: **the justice transition is the requirements document for this abstraction, not a
+consumer of it.** Before promoting anything from economy or education into the kit,
+check it against what justice's migration actually needs. The dispatcher is the easy
+case — justice needs a runner much like the other two. The cases worth the inversion
+are the ones justice surfaces that neither sibling did.
+
+This is deliberately the opposite of the usual order, and the cost is real: abstracting
+against a third repo's not-yet-built requirements is slower than promoting code that
+already works for two. The reason to pay it is that abstracting from two repos which
+already agree produces a toolkit that fits them and fights the third — and the third is
+the most developed dashboard in the series, so that fight is the expensive one.
+
 ### Revisit if
 
 - A dashboard needs a serving configuration a per-site include cannot express.
