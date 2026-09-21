@@ -11,6 +11,104 @@ dated entry under "Done" when you finish anything nontrivial.
 
 ## Next Up
 
+**Container consolidation (`docs/ARCHITECTURE.md` §1.3, decided 2026-09-21) — two
+containers for the series instead of two per dashboard. Items 1 then 2, in that order;
+both should land before 901justice's Postgres + admin step so the review queue gets
+built once rather than per dashboard. Item 3 runs in parallel — it is a content-model
+question the justice migration raised, not container work, and it is paced by that
+migration rather than by these two.**
+
+**Read `docs/ARCHITECTURE.md` §1.3's "justice is the lens" subsection before promoting
+anything here.** Economy's and education's copies already agree with each other;
+abstracting from that agreement produces a toolkit that fits two repos and fights the
+third, and the third is the most developed dashboard in the series.
+
+1. [ ] **Promote the pipeline dispatcher into the kit as `toolkit.pipeline`, namespaced
+   by dashboard.** §1.3's first half: one pipeline container running every dashboard's
+   jobs.
+
+   *Rule-of-three: satisfied, not exempted.* An earlier draft of this ticket argued an
+   exemption — that §1.3's single container means there is no pattern to share, only
+   two copies of one service to consolidate. That still holds, but it is the weaker
+   argument and it is not needed: **901justice adopting Postgres brings a third
+   consumer**, which satisfies the rule on its own terms. `docs/PROJECT_NOTES.md`'s
+   "Rule-of-three, applied" entry listed `runner.py`/`jobs.py` as reference
+   implementations rather than extraction candidates; it is updated for this.
+   Per §1.3's "justice is the lens" subsection, check the registry design against
+   justice's actual job inventory before landing it — the extraction is justified now,
+   but the *shape* should be answerable to the repo that hasn't been accommodated yet.
+
+   *What moves, and what it has to reconcile.* Two drifted copies exist
+   (`901economy/pipeline/`, `901education/pipeline/`), and they disagree on real
+   things, not just style:
+
+   | Module | Reconciliation needed |
+   |---|---|
+   | `runner.py` (51 vs 85 lines) | Education's `logging` and `argparse`/`--job`/`--run-now` CLI are strictly more useful than economy's bare app — take education's shape. Keep the dispatcher-not-transformer rule in the docstring. |
+   | `jobs.py` → `registry.py` | **The actual design problem.** Economy runs `-m pipeline.<job>`; education resolves `scripts/<job>.py` via `get_job_command()`. The registry must map job name → command, not just hold a name set, with both layouts expressible. Education's `get_job_command` is the more general of the two and the better base. |
+   | `publish_site.py` | Exists only in economy. Generalize `SITE_ROOT/releases/<ts>/` + `current` to `SITE_ROOT/<dashboard>/releases/<ts>/` + `<dashboard>/current`. Keep the `os.replace()` symlink swap and the atomic-write rule (§1.1) exactly as they are. |
+   | `sync_n8n.py` (53 vs 55 lines) | Near-identical; one copy, dashboard-parameterized. |
+
+   *Explicitly out of scope.* Each dashboard's `fetch_*.py`, `build_data_files.py`,
+   `db.py`, and `validate_snapshots.py` stay in their own repos — those are
+   dashboard-specific data logic, and `validate_snapshots.py` validates that
+   dashboard's own snapshot contract. Folding them in would be a different and much
+   larger decision than §1.3 made.
+
+   *Acceptance.*
+   - Route is `POST /run/{dashboard}/{job}`; unknown dashboard and unknown job both
+     404, distinguishably.
+   - A dashboard registers its jobs and their commands through one documented entry
+     point; nothing in the kit enumerates dashboard-specific job names.
+   - `publish()` takes a dashboard key and writes under `SITE_ROOT/<dashboard>/`.
+     Port `901Economy/tests/test_publish_site.py` alongside it.
+   - Both repos' `tests/test_n8n_workflows.py` (registry ↔ `n8n/*.json` agreement)
+     keep passing against the kit registry rather than a local `jobs.py`. Keep the
+     registry importable without FastAPI — economy's `jobs.py` docstring records that
+     pulling the web framework into that test broke it once, since `.[test]` does not
+     install the `server` extra.
+   - `python3 -m pytest -q` with a real Postgres (check the skip count), plus
+     `npm run typecheck && npm test` if anything in `ui/` is touched (it should not be).
+   - `README.md` module table + `CHANGELOG.md` `[Unreleased]` — this one is a code
+     change, so unlike §1.3 itself it does get an entry.
+
+   *Cutover risk — 901economy is live.* The `/run/<job>` → `/run/<dashboard>/<job>`
+   change rewrites every `n8n/*.json` URL. `sync_n8n.py` upserts those by workflow
+   name, so the workflow JSONs and the route change have to ship together, and the
+   old unnamespaced route should keep working until all three repos are cut over.
+   Per `AGENTS.md`'s pinning rule, the kit merges first, then each dashboard bumps
+   `requirements*.txt` to the real merge SHA — three separate follow-up commits in
+   three repos, not one.
+
+   *Consequence worth naming:* this closes education's publish gap as a side effect.
+   §1.3's table records that education has a pipeline container and a runner but no
+   `publish_site.py` and an image-only `nginx.conf`, so it cannot serve a server-built
+   release at all. It is not a separate ticket; it is what "one pipeline container"
+   means.
+
+2. [ ] **One nginx container serving every dashboard** (§1.3's second half). Companion
+   to the above, separate PR — one logical change each. Economy's `nginx.conf` is the
+   only one that implements §1.1 (volume root, image fallback, `/data/` block); it
+   becomes the shared base, with a documented per-site include for anything genuinely
+   dashboard-specific rather than a quietly edited per-repo copy. Needs the host check
+   §1.1 already flagged and never resolved: whether separate Coolify resources can
+   share the volume, or whether the builder has to write to a host bind mount. Confirm
+   before building either half.
+
+3. [ ] **Decide how kind-3 "document findings" surfaces are stored** — see
+   `docs/DASHBOARD_SURFACES.md`, which has the measured grounding (justice's 18
+   datasets: 10 trend, 3 finding-shaped), the four-kind surface taxonomy, a schema
+   sketch, and the two open decisions. Raised by the justice migration because
+   `doj_findings.json` and `juvenile_doj_monitor.json` cannot go in `indicators`
+   (`NUMERIC value`, required `period`, and editorial fields with no source). **Blocks
+   nothing in this repo yet** — it gates how justice's `doj-report` and `youth-justice`
+   pages get rebuilt, so it wants deciding alongside the migration rather than after.
+   The two questions: whether kind 3 lives in Postgres at all (D3's PR-gate reasoning
+   may cover it at justice's volume), and whether milestones are their own table. No
+   `ui/` extraction yet — two consumers, per §7.2; the doc says what to diff when the
+   third arrives.
+
+
 **Civic Engagement Suite & AI Story Engine (Parallel Track — see \`docs/CIVIC_ENGAGEMENT_SUITE.md\` for full 5-track WBS):**
 - [ ] **Track 1:** Shared Type Definitions (\`src/types/engagement.ts\`, \`src/types/crossDomain.ts\`, \`src/types/storyboard.ts\`).
 - [ ] **Track 2:** Core Action & Advocacy Components (\`AdvocacyDrawer.tsx\`, \`PrintFactSheet.tsx\` 1-pager generator, \`ToraRequestGenerator.tsx\`, \`CivicCalendarSync.tsx\`).
