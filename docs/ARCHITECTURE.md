@@ -356,6 +356,137 @@ public and admin into one Next.js server with `/admin` as a route. That takes
 the one surface that must never go down and couples it to the one that is
 allowed to.
 
+**This section fixes the boundary, not the count.** §1.3 settles how many
+containers sit on each side of it — one apiece for the whole series, not one
+apiece per dashboard.
+
+## 1.3 Two containers for the series, not two per dashboard
+
+**Decided, 2026-09-21.** §1.2 settled *what* the container boundary is — a public
+artifact on one side, an internal application on the other. It never said how many of
+each the series runs, and fork-per-dashboard answered that question by default: one
+pair per dashboard. Nobody chose that. It fell out of copying a repo.
+
+### The decision
+
+| | Count |
+|---|---|
+| Public sites | **one** nginx container, serving every dashboard from `/srv/site/<dashboard>/current` |
+| Pipelines | **one** container, running every dashboard's extractors, builds, publishes, and the `/admin` queue |
+| Postgres, n8n | unchanged — one each, as §2 already settled for the database |
+
+Two containers plus Postgres and n8n, at any number of dashboards. The status quo is
+2N + 2 — seven today (three sites, economy's and education's pipelines, Postgres,
+n8n; 901justice still refreshes data in GitHub Actions and has no pipeline container),
+eight once justice adopts one, ten at four dashboards.
+
+### What fork-per-dashboard actually produced — measured 2026-09-21
+
+This is not a tidiness argument. The duplicated pipeline scaffolding has already
+drifted, and in education's case into a state that cannot publish at all:
+
+| Artifact | 901economy | 901education | Divergence |
+|---|---|---|---|
+| `pipeline/runner.py` | 51 lines | 85 lines | One dispatcher, two independent evolutions — education grew `logging`, `argparse`, and a `get_job_command` indirection; economy hardcodes `-m pipeline.{job}` |
+| `nginx.conf` | `root /srv/site/current`, image fallback, `/data/` block | image root only | **Education's site container cannot serve a server-built release** |
+| `publish_site.py` | present | **absent** | Education has the pipeline container and the runner, and no way to close the loop |
+| `Dockerfile.pipeline` | `pip install ".[server]"` | `pip install -r scripts/requirements-server.txt` | One image, two dependency-declaration conventions |
+
+The last two rows are the load-bearing ones. §1.1's adopted mechanism — build on the
+server, swap a symlink — exists in exactly one repo. Education carries the container
+that was supposed to run it and cannot run it. That is the cost of the fork pattern
+showing up as a functional gap rather than as duplication someone would eventually
+tidy.
+
+### Why not one container
+
+Merging nginx into the pipeline container was considered, because it is where
+"consolidate onto one instance" naturally leads, and because the separation is
+thinner than the container count suggests: `Dockerfile.pipeline` installs Node 20 and
+runs `npm ci`, and `publish_site.py` runs `npm run build` there. **The static export
+is already produced inside the Python container.** Only serving is separate.
+
+Rejected, for four reasons in descending weight:
+
+1. **It publishes the container holding `DATABASE_URL` and the model API keys to
+   anonymous traffic.** Today that container's unreachability is a property of the
+   topology; merging makes it a property of an nginx `location` block. Honest
+   qualifier: §1.2 already concedes `/admin` gets published through the proxy, so
+   "never published" is ending regardless. The remaining difference — one
+   authenticated path versus the document root for anonymous traffic — is smaller
+   than it first sounds, and still real.
+2. **Restart coupling.** Every extractor change, kit pin bump, or admin tweak would
+   restart the public site. §1.2's first consequence is that the public surface does
+   not get pulled along by the admin's lifecycle; a merged container makes that
+   impossible by construction.
+3. **`next build` would compete with serving.** A Next build's peak memory and CPU
+   against live public traffic on one small host, with nothing between them.
+4. **A shared PID namespace with the extractors.** The pipeline subprocesses PDF
+   parsing and LLM extraction. An OOM kill there would take the public record with
+   it.
+
+None of the four is an argument for *per-dashboard* containers. They argue for keeping
+the two roles separate, which two containers does exactly as well as six.
+
+### Why not the conventional consolidation
+
+Also rejected: one Next.js application with a `[dashboard]` route, rendering every
+sector from Postgres at request time. This is the answer a reviewer reaches for when
+told "one instance," and it reopens three settled things at once — §1.1's build-time
+bake and the drift gate that depends on it (D2's stated purpose for
+`lib/validateData.ts`), §1.1's availability property, and §1.2's "the public site is a
+published document, not an application."
+
+**Multi-tenancy in the build is the goal. Multi-tenancy at runtime is the thing being
+refused.** §1.1's revisit clause still governs and is not weakened here: name the
+query-driven features first, then re-argue it.
+
+### The admin: §1.2 stands, and 901justice's D6 is superseded
+
+`901justice/PLATFORM_ARCHITECTURE_DECISIONS.md` D6 specifies the admin as its own
+deployed Next.js app. §1.2 rejects precisely that. The contradiction has been on file
+since 2026-08 and is resolved here in §1.2's favor: **the review queue is
+server-rendered inside the shared pipeline container** — one app, one deploy, one auth
+surface, in the process that already holds the database credentials and already ran
+the extraction being reviewed.
+
+D6 had one argument §1.2 never answered, recorded here rather than dropped: OAuth (D5)
+is a library call in Next.js and hand-rolled work in FastAPI. `901economy/PLAN.md`
+already downgraded to HTTPS + basic auth, which is that pressure surfacing. Below ten
+staff either is acceptable, and D5's actual content — no password storage, no reset
+flow, no PII beyond an email address — survives basic auth behind the proxy. **Decide
+the auth mechanism when the queue is built; it does not gate the container shape.**
+
+### The honest costs
+
+- **One pipeline container is one deploy and one failure domain for every dashboard's
+  extractors.** A bad push breaks all pipelines rather than one. This is the same
+  trade §2 accepted for a single Postgres instance, with the same reasoning and the
+  same scale caveat: it holds at three to five small dashboards on one host, and
+  splitting later is mechanical because the job registry is namespaced by dashboard
+  from the start.
+- **One nginx is one config reload for every public site.** Smaller than it looks —
+  content changes are symlink flips that never touch nginx, so the shared surface is
+  exposed only at config-change time.
+- **Per-dashboard `nginx.conf` files go away, and with them per-dashboard serving
+  quirks.** Economy's `/data/` block and image fallback become everyone's, which is an
+  improvement. Anything genuinely dashboard-specific has to become a documented
+  per-site include rather than a quietly edited file, and that discipline is now
+  load-bearing.
+- **This concentrates the host.** Four containers on one Coolify box is less isolation
+  than eight, not more. It is a deliberate trade of isolation for a setup cost
+  measured in a config file instead of a repo.
+
+### Revisit if
+
+- A dashboard needs a serving configuration a per-site include cannot express.
+- One pipeline's resource profile starves the others — split that one out, keeping the
+  shared registry.
+- A second jurisdiction becomes real. **§1.3 does not make that cheap and must not be
+  read as doing so.** It removes the container and repo setup cost; the
+  institution-specific source inventory a new jurisdiction needs is research, not
+  configuration. 901justice D8's deferral stands on its own terms.
+
 ## 2. One Postgres instance, one schema per dashboard, plus a shared `geo`
 
 ```
