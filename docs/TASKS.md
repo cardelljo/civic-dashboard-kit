@@ -109,6 +109,23 @@ third, and the third is the most developed dashboard in the series.
    third arrives.
 
 
+**Section pattern and headline review (proposed 2026-09-24 — see
+`docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md`).** A cross-dashboard design review found
+the type scale inverted on all three home pages (20px section headings over 30px
+numbers over 12px labels) and headings that name topics instead of findings. The doc
+specifies one section pattern for the series, headline records with provenance, a
+fact check plus narrative review in the admin queue, and a rotating "four things to
+know" strip. Its own Sequencing section orders the work; the first steps are owner
+decisions, not code:
+- [ ] Owner adopts (or amends) the section pattern.
+- [ ] Owner approves each dashboard's narrative brief (`docs/NARRATIVE_BRIEF.md` in each
+  dashboard repo — kept there, not here, because this repo is public).
+- [ ] Reference implementation in 901justice with `data/headlines.json` reviewed by PR.
+- [ ] Extract the section `ui/` components when a second dashboard adopts the pattern.
+- [ ] Headline records in Postgres + review queue — lands with the admin queue, after
+  items 1–2 above; bears on item 3's open question.
+- [ ] Model-drafted narrative review as a pipeline job; rotating front strip.
+
 **Civic Engagement Suite & AI Story Engine (Parallel Track — see \`docs/CIVIC_ENGAGEMENT_SUITE.md\` for full 5-track WBS):**
 - [ ] **Track 1:** Shared Type Definitions (\`src/types/engagement.ts\`, \`src/types/crossDomain.ts\`, \`src/types/storyboard.ts\`).
 - [ ] **Track 2:** Core Action & Advocacy Components (\`AdvocacyDrawer.tsx\`, \`PrintFactSheet.tsx\` 1-pager generator, \`ToraRequestGenerator.tsx\`, \`CivicCalendarSync.tsx\`).
@@ -220,6 +237,19 @@ when its gate clears or the user asks for it directly.
 ---
 
 ## Done — dated log
+
+### 2026-09-24 — Design review of all three home pages; section pattern + headline review spec
+- Rendered and measured all three dashboards (desktop and phone), ran a zoomed-out
+  squint test, and audited every home-page section. Findings and the proposal are in
+  `docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md` (proposed, not adopted), tracked from
+  Next Up.
+- Quick fixes the review found shipped in the dashboards, not here: 901economy#67 (kit
+  `ui/` components rendered unstyled — Tailwind `content` didn't scan
+  `node_modules/civic-dashboard-kit`, which this repo's README already documents;
+  internal job/ticket references on public pages; FRED thousands-scale jobs figure),
+  901justice#53 and 901education#66 (contrast, internal jargon, stale month labels).
+- Narrative briefs drafted in each (private) dashboard repo's `docs/NARRATIVE_BRIEF.md`,
+  kept out of this public repo on purpose.
 
 ### 2026-09 — Civic Storyboard & Scrollytelling Engine shipped in `ui/storyboard/`
 - `StoryboardPresenter.tsx` and `StoryboardModal.tsx` added to shared UI package.
