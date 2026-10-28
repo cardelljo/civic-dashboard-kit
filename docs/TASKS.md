@@ -126,6 +126,17 @@ decisions, not code:
   items 1–2 above; bears on item 3's open question.
 - [ ] Model-drafted narrative review as a pipeline job; rotating front strip.
 
+**Series redesign direction (set 2026-10-28 — see `docs/REDESIGN_DIRECTION_2026-10.md`).**
+A persona review of every page concluded: keep the headline unit, rebuild the front door
+and page model around it. Phases 0–2 run on all three dashboards; justice moves to topic
+pages first. Per-dashboard phase tickets live in each dashboard's task list. Kit-side work
+it implies, each subject to rule-of-three:
+- [ ] A rendered-text check for internal language (phase 0), once a second dashboard
+  copies the first one's.
+- [ ] Shared chart forms and the share-card template (phases 1–2), when a second
+  dashboard builds them.
+- [ ] One shared place map and picker for `/where` (phase 3).
+
 **Civic Engagement Suite & AI Story Engine (Parallel Track — see \`docs/CIVIC_ENGAGEMENT_SUITE.md\` for full 5-track WBS):**
 - [ ] **Track 1:** Shared Type Definitions (\`src/types/engagement.ts\`, \`src/types/crossDomain.ts\`, \`src/types/storyboard.ts\`).
 - [ ] **Track 2:** Core Action & Advocacy Components (\`AdvocacyDrawer.tsx\`, \`PrintFactSheet.tsx\` 1-pager generator, \`ToraRequestGenerator.tsx\`, \`CivicCalendarSync.tsx\`).
@@ -237,6 +248,11 @@ when its gate clears or the user asks for it directly.
 ---
 
 ## Done — dated log
+
+### 2026-10-28 — Series redesign direction
+- Added `docs/REDESIGN_DIRECTION_2026-10.md`: page model, phases 0–4, chart grammar,
+  share cards and the story rule, from a persona review of all 22 pages. It extends
+  `docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md`. Tracked from Next Up.
 
 ### 2026-09-24 — Design review of all three home pages; section pattern + headline review spec
 - Rendered and measured all three dashboards (desktop and phone), ran a zoomed-out
