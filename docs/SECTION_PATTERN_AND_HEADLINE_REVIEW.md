@@ -8,6 +8,9 @@ section by section) and a round of mockups the owner reviewed. Tracked from
 FRED thousands scale, stale month labels) already shipped separately as
 901economy#67, 901justice#53 and 901education#66.
 
+**Update 2026-10-28:** `docs/REDESIGN_DIRECTION_2026-10.md` sets the page model, the
+order of work and the chart grammar around this pattern.
+
 This doc covers four things that depend on each other, in build order:
 
 1. **The section pattern** — how every home-page section reads, the same way on all
