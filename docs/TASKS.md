@@ -122,6 +122,16 @@ decisions, not code:
   dashboard repo — kept there, not here, because this repo is public).
 - [ ] Reference implementation in 901justice with `data/headlines.json` reviewed by PR.
 - [ ] Extract the section `ui/` components when a second dashboard adopts the pattern.
+  **Gate cleared for `lib/headlines.ts`:** all three dashboards carry byte-identical
+  copies (2026-10-30), so it can move into `ui/` as the headline engine, with
+  `SectionHeadline.tsx` beside it. 901justice does not consume the kit's npm package
+  yet (pip only), so it adds that dependency first.
+- [x] **Live headlines (2026-10-30, §2 "Live headlines").** A headline whose claim still
+  holds refreshes its figures on new data instead of dropping off; a broken claim shows
+  a pre-approved alternate, else the topic header. Built in the three dashboards'
+  `lib/headlines.ts`.
+- [ ] Notify a person when a headline lands in review/alternate/stale. Today the
+  build check (justice, education) and `publish_site` (economy) only log it.
 - [ ] Headline records in Postgres + review queue — lands with the admin queue, after
   items 1–2 above; bears on item 3's open question.
 - [ ] Model-drafted narrative review as a pipeline job; rotating front strip.
@@ -248,6 +258,11 @@ when its gate clears or the user asks for it directly.
 ---
 
 ## Done — dated log
+
+### 2026-10-30 — Live headlines spec
+- `docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md` §2: a heading refreshes while its claim
+  holds instead of going stale on every new period. Owner decision recorded there.
+  Implemented in the three dashboards (their `lib/headlines.ts`); tracked from Next Up.
 
 ### 2026-10-28 — Series redesign direction
 - Added `docs/REDESIGN_DIRECTION_2026-10.md`: page model, phases 0–4, chart grammar,
