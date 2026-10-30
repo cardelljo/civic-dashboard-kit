@@ -126,11 +126,49 @@ headlines(
 
 Two properties matter more than the column list:
 
-- **A heading is tied to the cell it describes.** When a newer run supersedes that
-  cell, the heading is automatically **stale** — it drops back to review and stops
-  being featured, rather than asserting a number the page no longer shows.
+- **A heading is tied to the cells it describes.** It never asserts a number the page
+  no longer shows — but a newer period is not by itself a reason to pull it (see "Live
+  headlines" below).
 - **Approval is recorded, not implied.** The public page can show that a heading was
   reviewed, when, and against which data vintage.
+
+### Live headlines (2026-10-30)
+
+The first build pinned every heading to exact values, so each new month made an
+approved heading stale even when its sentence was still true (901economy's jobs
+heading, approved on June figures, would drop off when July landed). A headline on
+regularly updated data is now written as a **claim over named values**, not a set of
+pinned numbers:
+
+- `values` — the figures the copy uses, each read from the data at a period that is
+  fixed, `"latest"`, or derived from another value (same period, same month in a given
+  year, n years back). Derived values: difference, percent change, median, rank.
+- `claim` — the conditions the wording asserts, e.g. *newest month < same month of
+  2019*, or *Memphis < 0.5 × peer median*. Quantifier words get bounds here
+  ("about 30%" → −33..−27).
+- Heading, context line, anchor and as-of are **templates** filled from `values`.
+- `approved_values` and `material` — what the figures were at approval and how far
+  each may move before someone should look again.
+- `alternates` — wordings approved in advance for a predictable turn (jobs back above
+  the 2019 count), each with its own claim.
+
+Each build evaluates every record to one state:
+
+| State | Renders | Meaning |
+|---|---|---|
+| current | yes | Figures exactly as approved. |
+| refreshed | yes | Claim holds; figures updated within their bounds. |
+| review | yes, flagged | Claim holds, but a figure moved past its `material` bound. |
+| alternate | yes, flagged | Claim broke; a pre-approved alternate whose claim holds shows. |
+| stale | no, flagged | Claim broke with no alternate, or a value is missing. |
+| held | no | `hold_until_check` set. |
+
+**Owner decision (2026-10-30):** when a claim breaks, the page shows a pre-approved
+alternate if one exists, otherwise the plain topic header until review. It does not
+keep the old wording up with an old date. Pinned `checks` remain right for annual or
+one-off figures. Approval still records the wording and the template; refreshing
+figures under an unchanged claim is not a new editorial choice, so it needs no new
+decision. A material move or an alternate does, and is flagged.
 
 **Interim, before the queue exists.** The admin review queue lands after the container
 consolidation (Next Up items 1–2). Until then a dashboard can adopt the section pattern
