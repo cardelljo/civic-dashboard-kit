@@ -232,6 +232,23 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
   store module to migrate). Unlike education, no history question blocks it — this
   half is ready to delegate for planning today.
 
+**Geography tags, abstracted by jurisdiction (opened 2026-10-31).** Design and reasoning:
+`docs/PEER_COMPARISONS_AND_GEOGRAPHY_2026-10.md`. Owner-approved 2026-10-31. All three
+dashboards need it, so it clears rule-of-three.
+
+- [ ] **`GeographyTag` in `ui/`.** A generic level enum (`city`, `county`,
+  `school-district`, `metro`, `state`, `nation`, `peer-ring`) plus a per-jurisdiction
+  config of display names and one-line notes. No place names in the component: a new
+  jurisdiction (education's Nashville/MNPS next) is a config entry, not new code. Render
+  through `SourceLine`'s existing `geography` slot as a chip with a tap-for-more note.
+  Vitest coverage for an unknown level and a missing config entry.
+- [ ] **"Which <place>?" table** for each Data Sources page, generated from the same level
+  data and config: measure, level, why (the level the source publishes).
+- [ ] **Place ladder chart form** (City / County / Metro bars) for measures published at two
+  or more levels. Only once a second dashboard needs it; economy's population section is
+  the first consumer.
+- [ ] Optional: a headline check that the level named in the wording matches the data row.
+
 ---
 
 ## Parked — tracked but not Next Up
