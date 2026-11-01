@@ -15,6 +15,8 @@ export type { DataSource } from './DataStatusPanel';
 
 export { default as SourceLine } from './SourceLine';
 export type { SourceLineProps } from './SourceLine';
+export { default as GeographyTag } from './GeographyTag';
+export type { GeographyLevel, GeographyTagProps, JurisdictionConfig } from './GeographyTag';
 
 // Civic Storyboard & Scrollytelling Suite
 export { default as StoryboardPresenter } from './storyboard/StoryboardPresenter';

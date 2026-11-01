@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
+import GeographyTag, { type GeographyTagProps } from './GeographyTag';
 
 /**
  * The standard attribution line under a figure.
@@ -36,8 +37,8 @@ type Attribution =
 export type SourceLineProps = Attribution & {
   /** Where a reader verifies the figure. Wraps the source name when present. */
   sourceUrl?: string | null;
-  /** Trailing geography or context, e.g. 'Memphis MSA', 'MSCS'. */
-  geography?: string;
+  /** Plain trailing context, or a jurisdiction-configured geography chip. */
+  geography?: string | GeographyTagProps;
   /**
    * Methodology caveat -- suppression rules, COVID-disrupted years, what is and
    * is not machine-extracted. `ReactNode` because these routinely contain links.
@@ -66,11 +67,6 @@ export default function SourceLine({
   // own pipeline), so vintage-only is a supported shape, not a degenerate one.
   const primary = source ?? vintage;
 
-  // Only a separate segment when it is not already serving as `primary`.
-  const trailing = [source ? vintage : undefined, geography].filter(
-    (segment): segment is string => Boolean(segment),
-  );
-
   // Unreachable through the type above, reachable in a repo that ignores type
   // errors. Render the gap rather than hiding it: a figure whose provenance
   // silently vanished is the failure this whole contract exists to prevent.
@@ -94,7 +90,11 @@ export default function SourceLine({
       ) : (
         primary
       )}
-      {trailing.length > 0 ? ` · ${trailing.join(' · ')}` : ''}
+      {/* Vintage is a separate segment only when it is not the primary. */}
+      {source && vintage ? ` · ${vintage}` : ''}
+      {geography ? (
+        <> · {typeof geography === 'string' ? geography : <GeographyTag {...geography} />}</>
+      ) : null}
       {caveat ? <> {caveat}</> : null}
     </p>
   );
