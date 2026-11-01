@@ -286,11 +286,11 @@ when its gate clears or the user asks for it directly.
   Dashboard adoption and dependency pin changes remain separate follow-ups.
 - Verified: `npm run typecheck` passed; `npm test` passed 41 tests across 4 files;
   `python3 -m pytest -q -rs` passed 74 tests, with 1 expected local CI-driver guard
-  skip, against a disposable Postgres 16 / PostGIS 3.4 database. No database tests
-  skipped. `git diff --check` passed.
-- Not verified: the CI-matching Postgres 18 / PostGIS 3.6 image (image download
-  exceeded this session's disk capacity), dashboard integration, or a browser
-  rendering check. Python/store code and dashboard pins were not changed.
+  skip, against a disposable Postgres 18 / PostGIS 3.6 database matching CI. No database
+  tests skipped. `git diff --check` passed. An earlier run against Postgres 16 /
+  PostGIS 3.4 also passed 74 tests with the same single expected local guard skip.
+- Not verified: dashboard integration or a browser rendering check. Python/store
+  code and dashboard pins were not changed.
 
 ### 2026-10-30 — Live headlines spec
 - `docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md` §2: a heading refreshes while its claim
