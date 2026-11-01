@@ -138,7 +138,7 @@ holds for your own work and for delegated work, and for choices the ticket's aut
 too. Report it alongside the bugs, with reasoning, not as an afterthought. (2026-11-01:
 the peer GDP chart and the People/Returns peer medians hid the whole comparison when any
 one of nine metros was missing. Review passed the code as correct; the owner asked why
-we wouldn't show the metros we had. The rule became "show the peers we have, floor 7 of 9.")
+we wouldn't show the metros we had. The rule became "show the peers we have, above a minimum count.")
 
 ## 6. When to ask, when to act
 
