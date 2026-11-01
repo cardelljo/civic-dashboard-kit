@@ -276,6 +276,12 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-11-01 — Reviews check decisions, not just code
+- Owner rule: a review also checks the judgment calls behind the code, with reasoning.
+  Added to `.claude/skills/civic-dashboard-dev/SKILL.md` §5 (reviewers) and `AGENTS.md`
+  "Before calling a task done" (authors, including delegates, name their judgment calls
+  in the PR body). Prompted by the all-or-nothing peer comparisons in 901Economy #91/#92.
+
 ### 2026-11-01 — Geography tags abstracted by jurisdiction
 - Added `ui/GeographyTag.tsx`, exported `GeographyLevel`, `JurisdictionConfig`, and
   `GeographyTagProps`; labels and optional notes come from dashboard config, with
