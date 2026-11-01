@@ -32,7 +32,11 @@ const LEVEL_NAMES: Record<GeographyLevel, string> = {
   'peer-ring': 'Peer ring',
 };
 
-/** Inline geography chip; a note opens on focus or tap and closes on blur/Escape. */
+/**
+ * Inline geography chip; a note opens on focus or tap and closes on blur/Escape.
+ * Below the `sm` breakpoint the note pins to the bottom of the viewport so a chip
+ * near the right edge of a phone screen can't push it off-screen.
+ */
 export default function GeographyTag({ level, jurisdiction }: GeographyTagProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
@@ -67,7 +71,7 @@ export default function GeographyTag({ level, jurisdiction }: GeographyTagProps)
         id={noteId}
         role="note"
         hidden={!open}
-        className="absolute left-0 top-full z-10 mt-1 w-56 max-w-[80vw] rounded border border-slate-300 bg-white p-2 text-xs leading-normal text-slate-700 shadow-md"
+        className="fixed inset-x-4 bottom-4 z-10 sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-1 sm:w-56 rounded border border-slate-300 bg-white p-2 text-xs leading-normal text-slate-700 shadow-md"
       >
         {note}
       </span>
