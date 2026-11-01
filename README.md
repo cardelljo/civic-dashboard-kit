@@ -198,6 +198,7 @@ values = extract_metrics(
 
 | Module | What it does |
 |---|---|
+| `ui/GeographyTag.tsx` | Generic area-level chip, named by a dashboard-supplied `JurisdictionConfig`, with notes available on tap or keyboard focus. Also accepted through `SourceLine`'s `geography` slot. |
 | `census.py` | Census ACS (detail + subject tables; county/tract/MSA/place) and BLS time series. No API key required at moderate volumes. |
 | `fred.py` | FRED (Federal Reserve Economic Data) series-observations client. Drops FRED's `.` missing-value sentinel rather than parsing it as zero. Free API key. |
 | `bea.py` | BEA Regional API client — GDP-by-area tables (nominal, chained/real, by-industry). Free API key. |
@@ -263,8 +264,32 @@ import {
 `status` existed; use it rather than re-deriving the rule, so your own components
 agree with these two.
 
-All three components are presentational. They take already-imported JSON as props
+These components take already-imported JSON or jurisdiction config as props
 and fetch nothing, because every dashboard in this series is a static export.
+
+### `GeographyTag` — jurisdiction-configured area labels
+
+`GeographyLevel` is the generic level union: `city`, `county`, `school-district`,
+`metro`, `state`, `nation`, and `peer-ring`. Each dashboard supplies its own
+`JurisdictionConfig`; the kit includes no jurisdiction names or default places.
+
+```tsx
+import { GeographyTag, SourceLine, type JurisdictionConfig } from 'civic-dashboard-kit';
+
+const jurisdiction: JurisdictionConfig = {
+  city: { name: 'River city' },
+  metro: { name: 'River metro', note: 'Nine surrounding counties.' },
+};
+
+<GeographyTag level="metro" jurisdiction={jurisdiction} />
+<SourceLine source="Census ACS" vintage="2023"
+  geography={{ level: 'metro', jurisdiction }} />
+```
+
+A chip with a note opens on tap/click or keyboard focus; blur or Escape dismisses
+the note. A chip without a note is plain text. Missing config entries display the
+generic level name, and unknown runtime levels display "Unknown geography".
+The existing `geography="..."` string form of `SourceLine` remains supported.
 
 ### `SourceLine` — the standard attribution line
 

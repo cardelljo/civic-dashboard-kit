@@ -236,7 +236,7 @@ isn't lost — see `docs/PROJECT_NOTES.md` for the grounding on each):**
 `docs/PEER_COMPARISONS_AND_GEOGRAPHY_2026-10.md`. Owner-approved 2026-10-31. All three
 dashboards need it, so it clears rule-of-three.
 
-- [ ] **`GeographyTag` in `ui/`.** A generic level enum (`city`, `county`,
+- [x] **`GeographyTag` in `ui/`.** A generic level enum (`city`, `county`,
   `school-district`, `metro`, `state`, `nation`, `peer-ring`) plus a per-jurisdiction
   config of display names and one-line notes. No place names in the component: a new
   jurisdiction (education's Nashville/MNPS next) is a config entry, not new code. Render
@@ -275,6 +275,22 @@ when its gate clears or the user asks for it directly.
 ---
 
 ## Done — dated log
+
+### 2026-11-01 — Geography tags abstracted by jurisdiction
+- Added `ui/GeographyTag.tsx`, exported `GeographyLevel`, `JurisdictionConfig`, and
+  `GeographyTagProps`; labels and optional notes come from dashboard config, with
+  generic missing-entry and unknown-level fallbacks. Notes open on tap/click or
+  keyboard focus and dismiss on blur or Escape. No jurisdiction names in defaults.
+- `SourceLine.geography` accepts structured chip props while preserving its string
+  form and separator behavior. README module row and usage plus CHANGELOG updated.
+  Dashboard adoption and dependency pin changes remain separate follow-ups.
+- Verified: `npm run typecheck` passed; `npm test` passed 41 tests across 4 files;
+  `python3 -m pytest -q -rs` passed 74 tests, with 1 expected local CI-driver guard
+  skip, against a disposable Postgres 18 / PostGIS 3.6 database matching CI. No database
+  tests skipped. `git diff --check` passed. An earlier run against Postgres 16 /
+  PostGIS 3.4 also passed 74 tests with the same single expected local guard skip.
+- Not verified: dashboard integration or a browser rendering check. Python/store
+  code and dashboard pins were not changed.
 
 ### 2026-10-30 — Live headlines spec
 - `docs/SECTION_PATTERN_AND_HEADLINE_REVIEW.md` §2: a heading refreshes while its claim

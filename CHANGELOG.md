@@ -8,6 +8,11 @@ able to tell at a glance whether a release concerns it.
 
 ### Added — TypeScript half
 
+- `GeographyTag`, `GeographyLevel`, and `JurisdictionConfig`: generic area chips
+  with dashboard-supplied names and optional notes that open on tap or keyboard
+  focus. `SourceLine.geography` accepts the chip configuration alongside its
+  existing string form. No dashboard adoption or dependency pins changed.
+
 - **Civic Storyboard & Scrollytelling Suite (\`ui/storyboard/\`):** Shared 4-slide interactive data narrative engine inspired by \`decriminalizepoverty.org/present1/\`, consumable by \`901education\`, \`901justice\`, and \`901economy\`.
   - \`StoryboardPresenter\`: Multi-slide responsive carousel with touch swipe, keyboard navigation (arrow keys), and step indicators.
   - \`StoryboardModal\`: Pop-up modal wrapper for "Tell the Story Behind This Data" triggers.
