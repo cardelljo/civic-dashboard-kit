@@ -130,6 +130,16 @@ Review delegated output as real work. It has caught bugs here that the author mi
 the author has caught bugs it introduced. When it disagrees with an instruction, check the
 source before assuming the instruction was right.
 
+**A review checks the decisions, not just the code.** Correct code can implement the wrong
+call. For every judgment the work makes (a fallback, a threshold, an all-or-nothing rule,
+what to hide, what a label claims), state the assumption behind it, say whether it still
+fits the owner's goals and recorded decisions, and recommend a change if it doesn't. This
+holds for your own work and for delegated work, and for choices the ticket's author made
+too. Report it alongside the bugs, with reasoning, not as an afterthought. (2026-11-01:
+the peer GDP chart and the People/Returns peer medians hid the whole comparison when any
+one of nine metros was missing. Review passed the code as correct; the owner asked why
+we wouldn't show the metros we had. The rule became "show the peers we have, floor 7 of 9.")
+
 ## 6. When to ask, when to act
 
 Ask when the call is genuinely the user's: an architecture trade-off, anything hard to

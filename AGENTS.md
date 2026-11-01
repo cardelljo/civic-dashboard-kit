@@ -103,6 +103,12 @@ it.)
 pending separately — a confident summary of untested work ends the review that would
 have caught the problem.
 
+**Name your judgment calls.** In the PR body, list each decision the code makes that a
+test can't settle (a fallback, a threshold, an all-or-nothing rule, what gets hidden)
+with the reasoning behind it, so a reviewer checks the call and not only the code.
+Reviewers: check those calls against the owner's recorded decisions, not just whether
+the code does what it says (`.claude/skills/civic-dashboard-dev` §5).
+
 - `python3 -m pytest -q` — against a real Postgres (above) if you touched
   `postgres_store.py`, `boundaries.py`, or anything in `toolkit.geo`; check the skip
   count, not just the exit code.
