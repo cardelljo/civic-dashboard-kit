@@ -8,6 +8,11 @@ able to tell at a glance whether a release concerns it.
 
 ### Added — TypeScript half
 
+- `termMarkers`, `decimalYear` and the `OfficeholderConfig` types (`ui/officeTerms.ts`):
+  neutral officeholder-term markers for trend charts (a dotted line at each change,
+  the name above each term). Jurisdiction-neutral: dashboards supply their own terms
+  keyed by geography id and draw the markers themselves. No chart component.
+
 - `GeographyTag`, `GeographyLevel`, and `JurisdictionConfig`: generic area chips
   with dashboard-supplied names and optional notes that open on tap or keyboard
   focus. `SourceLine.geography` accepts the chip configuration alongside its

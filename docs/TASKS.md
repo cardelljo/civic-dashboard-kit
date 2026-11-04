@@ -276,6 +276,17 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-11-04 — Officeholder-term markers (`ui/officeTerms.ts`)
+
+Owner request (Economy population thread): show mayoral terms as dotted lines on
+trend charts, reusable so 901justice can later put them on crime trends. The kit
+gets the shape and the arithmetic only (`termMarkers`: clip to the axis range,
+drop acting and sub-180-day terms by default, label midpoints). Real officeholders
+live in each dashboard's config, keyed by its geography ids, the same split as
+`GeographyTag` (kit has no place names). No chart component: §7.2 holds shared
+charts out until three dashboards use one. First consumer: 901economy's population
+trend. Justice crime overlay is proposed only; its framing is the owner's call.
+
 ### 2026-11-01 — Reviews check decisions, not just code
 - Owner rule: a review also checks the judgment calls behind the code, with reasoning.
   Added to `.claude/skills/civic-dashboard-dev/SKILL.md` §5 (reviewers) and `AGENTS.md`
