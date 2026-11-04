@@ -14,8 +14,10 @@
  * three-bar city/county/metro chart given a full-width card, using about a
  * third of it.
  *
- * Usage (needs Playwright; run from a dashboard repo with its dev server up):
- *   node node_modules/civic-dashboard-kit/scripts/space_audit.mjs http://localhost:3000/ [more urls]
+ * Usage (needs Playwright, resolved from the current directory; run from a
+ * dashboard repo with its dev server up, pointing at a kit checkout -- the npm
+ * package ships only ui/, so the script is not under node_modules):
+ *   node ../civic-dashboard-kit/scripts/space_audit.mjs http://localhost:3000/ [more urls]
  *     [--selector .stat-card] [--width 1280] [--min-width-share 0.6]
  *     [--max-empty-below 0.35] [--out space-audit]
  * Exit code 0 always; read the table.
