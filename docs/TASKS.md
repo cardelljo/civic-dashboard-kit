@@ -276,6 +276,17 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-11-04 — Space-use design check (`scripts/space_audit.mjs`)
+
+Owner asked for a design review that catches wasted space after 901economy's
+city/county/metro population bars took a full-width card and used about a third of
+it. Rule added to the chart grammar (`docs/REDESIGN_DIRECTION_2026-10.md`, "Space
+use"); the script loads pages at 1280px with Playwright and flags cards under 60%
+width coverage or over 35% empty below, with a screenshot of each. Verified against
+901economy: on `main` it flags that population card (52% coverage) and one gap tile;
+on the redesign branch only the gap tile. Thresholds are a judgment call, tuned on
+that one page; adjust as other pages are run.
+
 ### 2026-11-04 — Officeholder-term markers (`ui/officeTerms.ts`)
 
 Owner request (Economy population thread): show mayoral terms as dotted lines on

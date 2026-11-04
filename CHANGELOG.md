@@ -6,6 +6,12 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Added — tooling
+
+- `scripts/space_audit.mjs`: flags dashboard cards that leave most of their width or
+  height empty at desktop width (the chart grammar's new "Space use" rule). Needs
+  Playwright in the consuming repo. Not shipped in the npm `files` list.
+
 ### Added — TypeScript half
 
 - `termMarkers`, `decimalYear` and the `OfficeholderConfig` types (`ui/officeTerms.ts`):

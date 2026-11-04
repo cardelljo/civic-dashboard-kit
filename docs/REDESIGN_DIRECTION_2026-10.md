@@ -98,6 +98,12 @@ A small fixed set of forms. The big number becomes one form among several, not t
 - Every graphic can be shared as an image with its source and date.
 - No hover-only tooltips.
 - No Sankey until data supports one honestly.
+- **Space use (added 2026-11-04).** At desktop width a card's content should span most
+  of the card. A small chart (three bars, one number) shares a row with a related card
+  rather than taking a full-width card alone; a chart and the comparison that explains
+  it sit side by side. Check before each design PR with `scripts/space_audit.mjs`,
+  which flags cards whose content covers under 60% of their width or leaves over 35%
+  empty below. A flag is a prompt to look, not a failure.
 
 **Infographic layer:** at most one per section, an exact number always printed beside a
 pictogram, and no real-sounding quotes unless sourced. Each dashboard gets one signature
