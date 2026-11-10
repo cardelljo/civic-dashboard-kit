@@ -276,6 +276,28 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-11-04 — Space-use design check (`scripts/space_audit.mjs`)
+
+Owner asked for a design review that catches wasted space after 901economy's
+city/county/metro population bars took a full-width card and used about a third of
+it. Rule added to the chart grammar (`docs/REDESIGN_DIRECTION_2026-10.md`, "Space
+use"); the script loads pages at 1280px with Playwright and flags cards under 60%
+width coverage or over 35% empty below, with a screenshot of each. Verified against
+901economy: on `main` it flags that population card (52% coverage) and one gap tile;
+on the redesign branch only the gap tile. Thresholds are a judgment call, tuned on
+that one page; adjust as other pages are run.
+
+### 2026-11-04 — Officeholder-term markers (`ui/officeTerms.ts`)
+
+Owner request (Economy population thread): show mayoral terms as dotted lines on
+trend charts, reusable so 901justice can later put them on crime trends. The kit
+gets the shape and the arithmetic only (`termMarkers`: clip to the axis range,
+drop acting and sub-180-day terms by default, label midpoints). Real officeholders
+live in each dashboard's config, keyed by its geography ids, the same split as
+`GeographyTag` (kit has no place names). No chart component: §7.2 holds shared
+charts out until three dashboards use one. First consumer: 901economy's population
+trend. Justice crime overlay is proposed only; its framing is the owner's call.
+
 ### 2026-11-01 — Reviews check decisions, not just code
 - Owner rule: a review also checks the judgment calls behind the code, with reasoning.
   Added to `.claude/skills/civic-dashboard-dev/SKILL.md` §5 (reviewers) and `AGENTS.md`

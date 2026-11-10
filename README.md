@@ -199,6 +199,7 @@ values = extract_metrics(
 | Module | What it does |
 |---|---|
 | `ui/GeographyTag.tsx` | Generic area-level chip, named by a dashboard-supplied `JurisdictionConfig`, with notes available on tap or keyboard focus. Also accepted through `SourceLine`'s `geography` slot. |
+| `ui/officeTerms.ts` | Officeholder-term markers for trend charts (`termMarkers`, `decimalYear`, `OfficeholderConfig`). Pure placement arithmetic: the dashboard supplies its own terms keyed by its own geography ids and draws the markers in its chart library. |
 | `census.py` | Census ACS (detail + subject tables; county/tract/MSA/place) and BLS time series. No API key required at moderate volumes. |
 | `fred.py` | FRED (Federal Reserve Economic Data) series-observations client. Drops FRED's `.` missing-value sentinel rather than parsing it as zero. Free API key. |
 | `bea.py` | BEA Regional API client — GDP-by-area tables (nominal, chained/real, by-industry). Free API key. |
