@@ -36,3 +36,12 @@ def test_postgres_driver_is_installed_in_ci():
     if not CI:
         pytest.skip("local run: the postgres extra is optional outside CI")
     import psycopg2  # noqa: F401
+
+
+def test_server_extra_is_installed_in_ci():
+    """tests/test_pipeline_runner.py skips without FastAPI and httpx; in CI that
+    would leave the runner's HTTP contract (the one n8n calls) untested."""
+    if not CI:
+        pytest.skip("local run: the server extra is optional outside CI")
+    import fastapi  # noqa: F401
+    import httpx  # noqa: F401

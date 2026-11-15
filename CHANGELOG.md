@@ -6,6 +6,23 @@ able to tell at a glance whether a release concerns it.
 
 ## [Unreleased]
 
+### Added — Python half
+
+- `toolkit.pipeline` (`registry`, `migrate`, `post_deploy`, `runner`): one pipeline
+  container for every dashboard, `docs/TASKS.md` Next Up item 1's dispatcher and
+  registry. A dashboard declares its jobs in its own `pipeline.json`; the kit names no
+  dashboard's jobs. `POST /run/{dashboard}/{job}` returns distinguishable 404s for an
+  unknown dashboard and an unknown job, 403 for a manual-only job (never runnable over
+  HTTP, so never schedulable), and 409 while that dashboard has a pending migration.
+  The old `POST /run/{job}` works only when `PIPELINE_LEGACY_DASHBOARD` names the
+  dashboard it means. `migrate` is 901education's runner (rehearse by default, one
+  transaction per migration, `schema_migrations` with the same columns) with the lock
+  keyed per dashboard and a refusal to touch any schema but the dashboard's own.
+  `post_deploy` runs seeds, migrations and one-time jobs per dashboard, and one
+  dashboard's failure does not stop the others. New `server` extra (FastAPI, uvicorn).
+  Not yet included: the shared `sync_n8n` and `publish()` (follow-up PRs). No
+  dashboard pin changes.
+
 ### Added — tooling
 
 - `scripts/space_audit.mjs`: flags dashboard cards that leave most of their width or
