@@ -40,7 +40,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install package with all extras
-        run: pip install -e ".[ai,postgres]" pytest
+        # httpx is FastAPI's TestClient transport, for tests/test_pipeline_runner.py.
+        run: pip install -e ".[ai,postgres,server]" pytest httpx
 
       - name: Run tests
         env:

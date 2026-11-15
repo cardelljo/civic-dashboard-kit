@@ -27,6 +27,18 @@ third, and the third is the most developed dashboard in the series.
    by dashboard.** §1.3's first half: one pipeline container running every dashboard's
    jobs.
 
+   *Progress, 2026-11-15.* The owner chose this shared runner over a justice-only copy
+   of education's container. `toolkit.pipeline` now has `registry`, `runner`,
+   `migrate` (education's Nashville migration runner, promoted) and `post_deploy`.
+   Three things in it come from justice rather than from the two existing copies, per
+   the "justice is the lens" rule: **manual-only jobs** (justice's jail-PDF extraction
+   has no review gate, so the runner never starts it over HTTP); **a schema check on
+   every write path**, because three dashboards' roles share one instance; and **a
+   per-dashboard interpreter**, because each dashboard pins its own kit commit.
+   Still open under this item: the shared `sync_n8n`; `publish()`; the container
+   image itself (one Dockerfile, the dashboard checkouts it serves, a venv each);
+   and each dashboard's cutover (`pipeline.json` plus a pin bump), justice first.
+
    *Rule-of-three: satisfied, not exempted.* An earlier draft of this ticket argued an
    exemption — that §1.3's single container means there is no pattern to share, only
    two copies of one service to consolidate. That still holds, but it is the weaker
