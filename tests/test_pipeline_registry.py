@@ -91,6 +91,22 @@ def test_each_dashboard_gets_its_own_database(tmp_path):
     assert hyphen.dsn({"DATABASE_URL_NORTH_SHORE": "y"}) == "y"
 
 
+
+def test_a_job_sees_only_its_own_database_and_no_github_token(tmp_path):
+    d = load_dashboard(write(tmp_path, justice_like()))
+    env = {"DATABASE_URL": "postgresql://shared", "DATABASE_URL_JUSTICE": "postgresql://justice_app",
+           "DATABASE_URL_EDUCATION": "postgresql://education_app", "DATABASE_URL_ECONOMY": "postgresql://economy_app",
+           "GITHUB_TOKEN": "t", "GH_TOKEN": "t", "ANTHROPIC_API_KEY": "kept", "PATH": "/usr/bin"}
+    job_env = d.subprocess_env(env)
+    assert job_env["DATABASE_URL"] == "postgresql://justice_app"
+    assert not [k for k in job_env if k.startswith("DATABASE_URL_")]
+    assert "GITHUB_TOKEN" not in job_env and "GH_TOKEN" not in job_env
+    assert job_env["ANTHROPIC_API_KEY"] == "kept" and job_env["PATH"] == "/usr/bin"
+    # A dashboard with no URL of its own falls back to the shared one, still alone.
+    other = parse_dashboard({"dashboard": "north-shore", "schema": "north_shore", "jobs": {"a": "a.py"}}, tmp_path)
+    assert other.subprocess_env(env)["DATABASE_URL"] == "postgresql://shared"
+    assert env["DATABASE_URL_EDUCATION"] == "postgresql://education_app", "the parent environment is untouched"
+
 def test_run_executes_in_the_checkout(tmp_path):
     root = write(tmp_path, {"dashboard": "t", "schema": "t", "jobs": {"where": "where.py"}})
     (root / "where.py").write_text("import os, sys; print(os.getcwd()); print(os.environ['DATABASE_URL']); "
