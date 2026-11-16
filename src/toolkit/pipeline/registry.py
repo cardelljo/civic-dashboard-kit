@@ -57,6 +57,9 @@ from typing import Mapping
 
 CONFIG_FILE = "pipeline.json"
 DEFAULT_TIMEOUT = 1800
+
+# Never passed to a job's process (see Dashboard.subprocess_env).
+WITHHELD_FROM_JOBS = frozenset({"GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT", "GH_ENTERPRISE_TOKEN"})
 KEY_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 JOB_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
@@ -130,9 +133,16 @@ class Dashboard:
 
     def subprocess_env(self, env: Mapping[str, str] | None = None) -> dict[str, str]:
         """The parent's environment with this dashboard's database as `DATABASE_URL`,
-        which is the name every dashboard's own `scripts/db.py` already reads."""
-        out = dict(os.environ if env is None else env)
-        dsn = self.dsn(out)
+        which is the name every dashboard's own `scripts/db.py` already reads.
+
+        Every `DATABASE_URL_<KEY>` is removed, so a job sees only its own database and
+        never another dashboard's login, and so are the GitHub tokens in
+        `WITHHELD_FROM_JOBS`: a job's fetchers and their third-party packages have no
+        use for them."""
+        parent = dict(os.environ if env is None else env)
+        dsn = self.dsn(parent)
+        out = {k: v for k, v in parent.items()
+               if not k.startswith("DATABASE_URL_") and k not in WITHHELD_FROM_JOBS}
         if dsn:
             out["DATABASE_URL"] = dsn
         out["PIPELINE_DASHBOARD"] = self.key

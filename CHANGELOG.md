@@ -22,6 +22,11 @@ able to tell at a glance whether a release concerns it.
   dashboard's failure does not stop the others. New `server` extra (FastAPI, uvicorn).
   Not yet included: the shared `sync_n8n` and `publish()` (follow-up PRs). No
   dashboard pin changes.
+- `toolkit.pipeline` jobs now get only their own database: every
+  `DATABASE_URL_<KEY>` is removed from a job's environment (its own arrives as
+  `DATABASE_URL`), and so are `GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_PAT` and
+  `GH_ENTERPRISE_TOKEN`. Before this, a justice job could read education's and
+  economy's database logins.
 
 ### Added — tooling
 
