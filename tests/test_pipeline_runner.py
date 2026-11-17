@@ -121,3 +121,37 @@ def test_cli_runs_manual_jobs_by_hand(tmp_path, monkeypatch, capfd):
     assert "ran" in capfd.readouterr().out
     assert runner.main(["run", "justice", "nope"]) == 1
     assert runner.main(["run", "justice", "boom"]) != 0
+
+
+def test_a_token_guards_every_route_but_health(tmp_path, monkeypatch):
+    monkeypatch.delenv(runner.TOKEN_ENV, raising=False)
+    registry = load_registry([checkout(tmp_path, "justice")])
+    app = TestClient(runner.create_app(registry, legacy_dashboard="justice", token="s3cret-value"))
+    assert app.get("/healthz").status_code == 200
+    for wrong in ({}, {"Authorization": "Bearer nope"}, {"Authorization": "s3cret-value"},
+                  {"Authorization": "Basic s3cret-value"}):
+        assert app.post("/run/justice/ok", headers=wrong).status_code == 401, wrong
+        assert app.post("/run/ok", headers=wrong).status_code == 401, wrong
+        assert app.get("/jobs", headers=wrong).status_code == 401, wrong
+    good = {"Authorization": "Bearer s3cret-value"}
+    assert app.post("/run/justice/ok", headers=good).json()["status"] == "success"
+    assert app.post("/run/ok", headers=good).json()["dashboard"] == "justice"
+    assert "justice" in app.get("/jobs", headers=good).json()
+
+
+def test_the_token_comes_from_the_environment(tmp_path, monkeypatch):
+    registry = load_registry([checkout(tmp_path, "justice")])
+    monkeypatch.setenv(runner.TOKEN_ENV, "from-env")
+    app = TestClient(runner.create_app(registry, legacy_dashboard=""))
+    assert app.post("/run/justice/ok").status_code == 401
+    assert app.post("/run/justice/ok", headers={"Authorization": "Bearer from-env"}).status_code == 200
+    monkeypatch.setenv(runner.TOKEN_ENV, "")
+    open_app = TestClient(runner.create_app(registry, legacy_dashboard=""))
+    assert open_app.post("/run/justice/ok").status_code == 200
+
+
+def test_jobs_never_see_the_runner_token(tmp_path):
+    from toolkit.pipeline.registry import load_dashboard
+    justice = load_dashboard(checkout(tmp_path, "justice"))
+    env = justice.subprocess_env({runner.TOKEN_ENV: "x", "DATABASE_URL_JUSTICE": "postgresql://j"})
+    assert runner.TOKEN_ENV not in env and env["DATABASE_URL"] == "postgresql://j"

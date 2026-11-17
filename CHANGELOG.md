@@ -8,6 +8,12 @@ able to tell at a glance whether a release concerns it.
 
 ### Added — Python half
 
+- `toolkit.pipeline.runner`: optional `PIPELINE_RUNNER_TOKEN`. When set, `/run/...`
+  and `/jobs` answer 401 without `Authorization: Bearer <token>`; `/healthz` stays
+  open for the container's health check. For a runner reachable through a Coolify
+  domain, where n8n cannot reach it on the Docker network. Jobs never see the token
+  (added to `registry.WITHHELD_FROM_JOBS`). Unset, nothing changes and the runner
+  logs a warning at start.
 - `toolkit.pipeline` (`registry`, `migrate`, `post_deploy`, `runner`): one pipeline
   container for every dashboard, `docs/TASKS.md` Next Up item 1's dispatcher and
   registry. A dashboard declares its jobs in its own `pipeline.json`; the kit names no
