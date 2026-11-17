@@ -14,7 +14,13 @@ transformer, and no data logic lives here.
                                   means -- so one repo's n8n workflows keep working
                                   while it moves over
     GET  /jobs                    every registered dashboard and its jobs
-    GET  /healthz
+    GET  /healthz                 always open, for the container's health check
+
+When `PIPELINE_RUNNER_TOKEN` is set, `/run/...` and `/jobs` answer 401 unless the
+request carries `Authorization: Bearer <token>`. Set it whenever the runner can be
+reached from outside its Docker network (a Coolify domain, for instance): without
+it, anyone who finds the address can start any scheduled job. Jobs never see it
+(`registry.WITHHELD_FROM_JOBS`).
 
 Serve with `python3 -m toolkit.pipeline.runner serve` (or
 `uvicorn --factory toolkit.pipeline.runner:create_app`). Run one job by hand,
@@ -32,6 +38,7 @@ Needs the `server` extra (FastAPI, uvicorn). The registry it reads does not.
 from __future__ import annotations
 
 import argparse
+import hmac
 import logging
 import os
 import subprocess
@@ -62,18 +69,37 @@ def migration_block(dashboard: Dashboard) -> str | None:
     return f"could not check for pending database migrations: {out[-500:] or result.returncode}"
 
 
-def create_app(registry: Registry | None = None, *, legacy_dashboard: str | None = None):
-    from fastapi import FastAPI, HTTPException
+TOKEN_ENV = "PIPELINE_RUNNER_TOKEN"
+
+
+def create_app(registry: Registry | None = None, *, legacy_dashboard: str | None = None,
+               token: str | None = None):
+    from fastapi import Depends, FastAPI, Header, HTTPException
 
     registry = load_registry() if registry is None else registry
     legacy_dashboard = os.environ.get("PIPELINE_LEGACY_DASHBOARD") if legacy_dashboard is None else legacy_dashboard
+    token = (os.environ.get(TOKEN_ENV) if token is None else token) or None
+    if token is None:
+        LOG.warning("%s is not set: /run and /jobs accept any request. Keep this runner off any "
+                    "public address.", TOKEN_ENV)
+
+    def require_token(authorization: str | None = Header(default=None)):
+        if token is None:
+            return
+        scheme, _, given = (authorization or "").partition(" ")
+        if scheme.lower() != "bearer" or not hmac.compare_digest(given.strip().encode(), token.encode()):
+            raise HTTPException(status_code=401, detail={"error": "unauthorized",
+                                                         "message": "missing or wrong runner token"},
+                                headers={"WWW-Authenticate": "Bearer"})
+
     app = FastAPI(title="Civic dashboard pipeline runner")
+    guarded = [Depends(require_token)]
 
     @app.get("/healthz")
     def healthz():
         return {"status": "ok", "dashboards": sorted(registry.dashboards)}
 
-    @app.get("/jobs")
+    @app.get("/jobs", dependencies=guarded)
     def jobs():
         return {d.key: {name: {"manual": job.manual, "description": job.description}
                         for name, job in sorted(d.jobs.items())} for d in registry}
@@ -112,11 +138,11 @@ def create_app(registry: Registry | None = None, *, legacy_dashboard: str | None
         LOG.info("%s/%s succeeded", dashboard.key, job.name)
         return {"dashboard": dashboard.key, "job": job.name, "status": "success", "stdout": result.stdout}
 
-    @app.post("/run/{dashboard_key}/{job_name}")
+    @app.post("/run/{dashboard_key}/{job_name}", dependencies=guarded)
     def run_job(dashboard_key: str, job_name: str):
         return dispatch(dashboard_key, job_name)
 
-    @app.post("/run/{job_name}")
+    @app.post("/run/{job_name}", dependencies=guarded)
     def run_legacy(job_name: str):
         if not legacy_dashboard:
             raise HTTPException(status_code=404, detail={

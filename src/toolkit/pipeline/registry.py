@@ -59,7 +59,8 @@ CONFIG_FILE = "pipeline.json"
 DEFAULT_TIMEOUT = 1800
 
 # Never passed to a job's process (see Dashboard.subprocess_env).
-WITHHELD_FROM_JOBS = frozenset({"GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT", "GH_ENTERPRISE_TOKEN"})
+WITHHELD_FROM_JOBS = frozenset({"GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT", "GH_ENTERPRISE_TOKEN",
+                                "PIPELINE_RUNNER_TOKEN"})
 KEY_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 JOB_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
