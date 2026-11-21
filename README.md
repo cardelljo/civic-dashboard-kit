@@ -196,10 +196,9 @@ values = extract_metrics(
 
 ## Data acquisition resources
 
-- [Tennessee education workbook pulls](docs/TDOE_FILE_PULLS.md) — 901education's
-  manifest-based downloader, on-demand workflow and district-growth/ACT/college-going
-  accessibility bundle. Includes the verified public Tennessee mirror transport,
-  provenance checks and the browser-download recording fallback.
+- [Tennessee education workbook pulls](docs/TDOE_FILE_PULLS.md) — how 901education's
+  scheduled jobs and bundle downloader get TDOE files through the state's kidcentral
+  content host, with provenance checks and the browser-download fallback.
 
 ## Module reference
 

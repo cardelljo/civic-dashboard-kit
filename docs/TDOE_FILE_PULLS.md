@@ -1,46 +1,50 @@
 # TDOE file pulls: 901education reference
 
-For Tennessee education workbooks, use 901education's existing
-[manifest-based bundle downloader](https://github.com/cardelljo/901education/blob/main/scripts/download_tdoe_bundle.py)
-and [on-demand workflow](https://github.com/cardelljo/901education/blob/main/.github/workflows/download-tdoe-files.yml).
-This is a reference resource alongside the kit's API clients. Source URLs,
-file lists and education-specific transformations stay in 901education.
+For Tennessee education workbooks, use 901education's existing code. Source URLs,
+file lists and education-specific transformations stay in 901education; this page
+is a reference alongside the kit's API clients.
 
-The [accessibility bundle](https://github.com/cardelljo/901education/tree/main/data/raw/tdoe-accessibility)
-registers district growth (`2025_tvaas_district_composite.xlsx`), ACT
-(`2024-25_ACT_district_suppressed.xlsx`) and college-going
-(`2023_postsecondary_enrollment_suppressed.xlsx`). Its README records requested
-vintages, URL verification limits, provenance and suppression requirements.
+## The route
 
-From a 901education checkout, using Python 3.9+ without extra packages:
+www.tn.gov refuses scripted downloads (403). The state's kidcentral content host,
+`www.kidcentraltn.extglb.tn.gov`, serves the same `/content/dam/tn/education/` paths.
+Cardell reported on 2026-11-21 that, from checking with TDOE, it is an acceptable
+alternative. Keep the www.tn.gov address as the recorded source.
 
-```bash
-python3 scripts/download_tdoe_bundle.py --bundle tdoe-accessibility --mirror
-```
-
-Alternatively run **Actions → Download TDOE files** there with bundle
-`tdoe-accessibility`. It requests files and creates a data PR on success;
-it does not run on a schedule or load the observations store.
-
-**Mirror downloads verified, 2026-11-21.** All three requested workbooks downloaded
-from the indexed public Tennessee host `www.kidcentraltn.extglb.tn.gov` using the
-explicit `--mirror` option. Original files and a manifest are included in the
-companion PR. The manifest retains canonical source URLs, records the actual
-mirror request URLs, Last-Modified headers and SHA-256 hashes. ZIP integrity and
-workbook XML checks passed. The workflow's mirror input defaults on.
-
-The normal `www.tn.gov` route still returned 403/503. The mirror is cached;
-compare releases against the official download page before updating. This is
-verified from Cloud, not yet from GitHub runners or the Coolify server. If both
-routes fail, save files from an accessible browser and record them:
+- **Scheduled jobs:** 901education's `scripts/tdoe_utils.download`, used by every
+  `fetch_tdoe_*` job, tries the content host first and then www.tn.gov.
+  `TDOE_MIRROR=0` turns it off.
+- **File bundles:** the
+  [bundle downloader](https://github.com/cardelljo/901education/blob/main/scripts/download_tdoe_bundle.py)
+  and [on-demand workflow](https://github.com/cardelljo/901education/blob/main/.github/workflows/download-tdoe-files.yml).
+  From a 901education checkout, with Python 3.9+ and no extra packages:
 
 ```bash
-python3 scripts/download_tdoe_bundle.py --bundle tdoe-accessibility --record-browser-downloads
+python3 scripts/download_tdoe_bundle.py --bundle tdoe-nashville --mirror
 ```
 
-The downloader preserves source URL/hash provenance and reports failed files.
-Automatic downloads require a release header; browser downloads record that
-it is absent. Confirm workbook contents before a transformation, preserve all
-suppression markers, and keep the original vintages in accessible outputs.
-See the bundle README for the full operating instructions.
+The manifest keeps the www.tn.gov `url`, records the host used as `requestUrl`, and
+stores Last-Modified and SHA-256. Workbooks must pass ZIP and workbook XML checks. A
+download dated earlier than the saved release is refused, because the content host can
+hold an older copy; compare a refresh with TDOE's download page too.
 
+The 2024-25 district growth, 2024-25 ACT and 2023 college-going workbooks are in
+[`data/raw/tdoe-nashville`](https://github.com/cardelljo/901education/tree/main/data/raw/tdoe-nashville).
+
+## Fallback
+
+If neither host works, save the files from a browser into the bundle folder and record them:
+
+```bash
+python3 scripts/download_tdoe_bundle.py --bundle tdoe-nashville --record-browser-downloads
+```
+
+Browser entries have no release date, so date them by the data year, never by the download.
+
+## Not yet tested
+
+The content host answered from a cloud workspace. Runs from 901education's pipeline
+server and GitHub's runners are untested.
+
+Preserve published suppression markers and the original vintages in any output built
+from these files.

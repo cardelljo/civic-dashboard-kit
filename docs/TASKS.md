@@ -292,11 +292,13 @@ when its gate clears or the user asks for it directly.
 
 - [x] Add [TDOE file pulls](TDOE_FILE_PULLS.md) to the README resource index,
   pointing to 901education's existing bundle downloader and on-demand workflow
-  and the new district-growth/ACT/college-going accessibility bundle.
+  and the district-growth/ACT/college-going files (now in the tdoe-nashville bundle).
   Kept education-specific URLs and file lists in the dashboard; no shared
   client or dependency-pin change. Updated after the mirror workaround succeeded:
   all three files downloaded from the public Tennessee content host, with source
   URL/hash/release-header provenance. Runner/server transport remains unverified.
+  Later the same day 901education's scheduled jobs were pointed at the same host,
+  on Cardell's report that TDOE considers it an acceptable alternative.
 
 
 ### 2026-11-04 — Space-use design check (`scripts/space_audit.mjs`)
