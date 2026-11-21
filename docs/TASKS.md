@@ -294,9 +294,9 @@ when its gate clears or the user asks for it directly.
   pointing to 901education's existing bundle downloader and on-demand workflow
   and the new district-growth/ACT/college-going accessibility bundle.
   Kept education-specific URLs and file lists in the dashboard; no shared
-  client or dependency-pin change. HTTP 403/503 remains unresolved; the guide
-  distinguishes registration from successful retrieval and includes the
-  existing browser-recording fallback.
+  client or dependency-pin change. Updated after the mirror workaround succeeded:
+  all three files downloaded from the public Tennessee content host, with source
+  URL/hash/release-header provenance. Runner/server transport remains unverified.
 
 
 ### 2026-11-04 — Space-use design check (`scripts/space_audit.mjs`)
@@ -427,3 +427,4 @@ decided, not a claim of authorship.)
 See `docs/ARCHITECTURE.md`'s own section numbering for anything not listed above — it
 is the canonical record of shared-infrastructure decisions and is kept current
 independently of this task list.
+

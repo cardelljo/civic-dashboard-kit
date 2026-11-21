@@ -198,8 +198,8 @@ values = extract_metrics(
 
 - [Tennessee education workbook pulls](docs/TDOE_FILE_PULLS.md) — 901education's
   manifest-based downloader, on-demand workflow and district-growth/ACT/college-going
-  accessibility bundle. Includes current access limitations and the existing
-  browser-download recording fallback.
+  accessibility bundle. Includes the verified public Tennessee mirror transport,
+  provenance checks and the browser-download recording fallback.
 
 ## Module reference
 
@@ -453,3 +453,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+
