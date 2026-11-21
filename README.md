@@ -194,6 +194,13 @@ values = extract_metrics(
 # only fills in fields the regex patterns didn't find.
 ```
 
+## Data acquisition resources
+
+- [Tennessee education workbook pulls](docs/TDOE_FILE_PULLS.md) — 901education's
+  manifest-based downloader, on-demand workflow and district-growth/ACT/college-going
+  accessibility bundle. Includes current access limitations and the existing
+  browser-download recording fallback.
+
 ## Module reference
 
 | Module | What it does |
