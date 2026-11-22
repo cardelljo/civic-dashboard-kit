@@ -194,6 +194,12 @@ values = extract_metrics(
 # only fills in fields the regex patterns didn't find.
 ```
 
+## Data acquisition resources
+
+- [Tennessee education workbook pulls](docs/TDOE_FILE_PULLS.md) — how 901education's
+  scheduled jobs and bundle downloader get TDOE files through the state's kidcentral
+  content host, with provenance checks and the browser-download fallback.
+
 ## Module reference
 
 | Module | What it does |
@@ -446,3 +452,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+

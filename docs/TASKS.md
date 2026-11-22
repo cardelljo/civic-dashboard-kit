@@ -288,6 +288,19 @@ when its gate clears or the user asks for it directly.
 
 ## Done — dated log
 
+### 2026-11-21 — TDOE file-pull reference resource
+
+- [x] Add [TDOE file pulls](TDOE_FILE_PULLS.md) to the README resource index,
+  pointing to 901education's existing bundle downloader and on-demand workflow
+  and the district-growth/ACT/college-going files (now in the tdoe-nashville bundle).
+  Kept education-specific URLs and file lists in the dashboard; no shared
+  client or dependency-pin change. Updated after the mirror workaround succeeded:
+  all three files downloaded from the public Tennessee content host, with source
+  URL/hash/release-header provenance. Runner/server transport remains unverified.
+  Later the same day 901education's scheduled jobs were pointed at the same host,
+  on Cardell's report that TDOE considers it an acceptable alternative.
+
+
 ### 2026-11-04 — Space-use design check (`scripts/space_audit.mjs`)
 
 Owner asked for a design review that catches wasted space after 901economy's
@@ -416,3 +429,4 @@ decided, not a claim of authorship.)
 See `docs/ARCHITECTURE.md`'s own section numbering for anything not listed above — it
 is the canonical record of shared-infrastructure decisions and is kept current
 independently of this task list.
+
